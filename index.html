@@ -379,7 +379,7 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.15';
+        const APP_VERSION = '00.03.16';
         const UPDATE_DATE = '2025-08-26';
 
         // --- DOM 요소 ---
@@ -694,22 +694,24 @@
             // onAuthStateChange 리스너가 감지하여 자동으로 메인 화면으로 전환합니다.
         }
 
-        async function handleLogout() {
-            if (confirm('로그아웃 하시겠습니까?')) {
-                const { error } = await _supabase.auth.signOut();
-                if (error) {
-                    console.error('Logout error:', error);
-                    showCustomAlert("로그아웃 실패: " + error.message, 'error');
-                } else {
-                    // 로그아웃 성공 시 로그인 버튼 상태를 초기화합니다.
-                    const loginBtn = document.getElementById('login-btn'); // 실제 로그인 버튼의 ID로 바꿔주세요.
-                    if (loginBtn) {
-                        loginBtn.disabled = false;
-                        loginBtn.textContent = '로그인';
-                    }
-                }
-            }
-        }
+		async function handleLogout() {
+			if (confirm('로그아웃 하시겠습니까?')) {
+				const { error } = await _supabase.auth.signOut();
+				if (error && error.message !== 'Auth session missing!') {
+					// 진짜 오류만 표시
+					console.error('Logout error:', error);
+					showCustomAlert("로그아웃 실패: " + error.message, 'error');
+				} else {
+					// 정상 로그아웃 or 이미 세션 없음 → UI 초기화
+					const loginBtn = document.getElementById('login-btn'); 
+					if (loginBtn) {
+						loginBtn.disabled = false;
+						loginBtn.textContent = '로그인';
+					}
+					showLoginSection(); // 로그인 화면으로 전환
+				}
+			}
+		}
 
         // --- 이벤트 리스너 연결 ---
         loginBtn.addEventListener('click', handleLogin);
