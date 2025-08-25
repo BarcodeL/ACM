@@ -379,8 +379,8 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.13';
-        const UPDATE_DATE = '2025-08-25';
+        const APP_VERSION = '00.03.14';
+        const UPDATE_DATE = '2025-08-26';
 
         // --- DOM 요소 ---
         const loginSection = document.getElementById('login-section');
@@ -426,7 +426,21 @@
 
         // --- 핵심 로직: 인증 상태 감지 (Realtime 우선 연결 방식으로 수정) ---
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            if ((event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') && !session) {
+                if (event === 'PASSWORD_RECOVERY') {
+					const newPassword = prompt("새 비밀번호를 입력하세요 (6자리 이상):");
+					if (newPassword) {
+						const { error } = await _supabase.auth.updateUser({ password: newPassword });
+						if (error) {
+							showCustomAlert("비밀번호 변경 실패: " + error.message, "error");
+						} else {
+							showCustomAlert("비밀번호가 성공적으로 변경되었습니다. 다시 로그인해주세요.", "success");
+							await _supabase.auth.signOut(); // 보안을 위해 로그아웃 후 다시 로그인 유도
+						}
+					}
+					return; // 다른 분기 실행하지 않고 종료
+				}
+			
+			if ((event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') && !session) {
                 showLoginSection();
                 return;
             }
