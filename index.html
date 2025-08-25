@@ -379,7 +379,7 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.14';
+        const APP_VERSION = '00.03.15';
         const UPDATE_DATE = '2025-08-26';
 
         // --- DOM 요소 ---
@@ -2231,44 +2231,44 @@
             exportToCsv(`세포주현황_${new Date().toISOString().split('T')[0]}.csv`, allVials);
         }
 
-        function parseCsv(text) {
-            // <<< 핵심 수정사항: 더 안정적인 CSV 분석 로직으로 전체 교체
-            const lines = text.replace(/\r/g, '').split('\n').filter(line => line.trim() !== '');
-            if (lines.length < 2) return [];
+		function parseCsv(text) {
+			// 줄 단위 분리 (CRLF/LF 호환)
+			const lines = text.replace(/\r/g, '').split('\n').filter(line => line.trim() !== '');
+			if (lines.length < 2) return [];
 
-            let headerLine = lines[0];
-            if (headerLine.charCodeAt(0) === 0xFEFF) {
-                headerLine = headerLine.slice(1);
-            }
-            
-            const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-            const result = [];
+			// BOM 제거
+			let headerLine = lines[0];
+			if (headerLine.charCodeAt(0) === 0xFEFF) {
+				headerLine = headerLine.slice(1);
+			}
 
-            for (let i = 1; i < lines.length; i++) {
-                const obj = {};
-                let line = lines[i];
-                
-                // 정규식을 사용하여 쉼표로 분리하되, 따옴표 안의 쉼표는 무시
-                const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+			// 헤더 추출
+			const headers = headerLine.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(h => h.trim().replace(/^"|"$/g, ''));
+			const result = [];
 
-                for (let j = 0; j < headers.length; j++) {
-                    if (values[j]) {
-                        let value = values[j].trim();
-                        // 양 끝의 따옴표 제거
-                        if (value.startsWith('"') && value.endsWith('"')) {
-                            value = value.substring(1, value.length - 1);
-                        }
-                        // 따옴표 두 개 연속("")는 따옴표 하나(")로 치환
-                        obj[headers[j]] = value.replace(/""/g, '"');
-                    } else {
-                        obj[headers[j]] = ''; // 값이 없는 경우 빈 문자열로 처리
-                    }
-                }
-                result.push(obj);
-            }
-            return result;
-            // <<< 핵심 수정사항 끝
-        }
+			for (let i = 1; i < lines.length; i++) {
+				const obj = {};
+				let line = lines[i];
+
+				// <<< 핵심 수정사항: 빈 칸도 유지하는 split 정규식 사용 >>>
+				const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+
+				for (let j = 0; j < headers.length; j++) {
+					let value = values[j] !== undefined ? values[j].trim() : "";
+
+					// 양 끝의 따옴표 제거
+					if (value.startsWith('"') && value.endsWith('"')) {
+						value = value.substring(1, value.length - 1);
+					}
+					// "" → " 치환
+					value = value.replace(/""/g, '"');
+
+					obj[headers[j]] = value;
+				}
+				result.push(obj);
+			}
+			return result;
+		}
         
         async function handleHistoryCsvImport(e, mode) {
             const file = e.target.files[0];
