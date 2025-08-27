@@ -381,8 +381,8 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.18';
-        const UPDATE_DATE = '2025-08-27';
+        const APP_VERSION = '00.03.19';
+        const UPDATE_DATE = '2025-08-28';
 
         // --- DOM 요소 ---
         const loginSection = document.getElementById('login-section');
@@ -2313,7 +2313,7 @@
 				const obj = {};
 				let line = lines[i];
 
-				// <<< 핵심 수정사항: 빈 칸도 유지하는 split 정규식 사용 >>>
+				// 빈 칸도 유지하는 split 정규식 사용 >>>
 				const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
 
 				for (let j = 0; j < headers.length; j++) {
@@ -2325,6 +2325,9 @@
 					}
 					// "" → " 치환
 					value = value.replace(/""/g, '"');
+
+                    // 값에 포함된 모든 종류의 엔터(줄바꿈) 문자를 삭제합니다.
+                    value = value.replace(/(\r\n|\n|\r)/g, '');
 
 					obj[headers[j]] = value;
 				}
@@ -2365,13 +2368,20 @@
                     if (newHistoryEntries.length === 0) throw new Error('유효한 기록을 찾을 수 없습니다.');
                     
                     if(mode === 'overwrite') {
-                        // <<< 핵심 수정사항: 데이터베이스 함수를 호출하여 모든 데이터를 삭제합니다.
+                        // 데이터베이스 함수를 호출하여 모든 데이터를 삭제합니다.
                         const { error: rpcError } = await _supabase.rpc('delete_all_history');
                         if (rpcError) throw new Error(`기존 기록 삭제 실패: ${rpcError.message}`);
                     }
                     
-                    const { error: insertError } = await _supabase.from('history').insert(newHistoryEntries);
-                    if(insertError) throw insertError;
+                    // ▼▼▼▼▼ 10000개씩 처리 ▼▼▼▼▼
+                    const CHUNK_SIZE = 10000;
+                    for (let i = 0; i < newHistoryEntries.length; i += CHUNK_SIZE) {
+                        const chunk = newHistoryEntries.slice(i, i + CHUNK_SIZE);
+                        console.log(`Importing history chunk ${i / CHUNK_SIZE + 1}...`);
+                        const { error: insertError } = await _supabase.from('history').insert(chunk);
+                        if (insertError) throw insertError;
+                    }
+                    // ▲▲▲▲▲ 10000개씩 처리 ▲▲▲▲▲
 
                     // 성공 메시지를 띄우기 전에 데이터를 다시 불러와 화면을 새로고침합니다.
                     await loadAllDataFromSupabase();
@@ -2443,10 +2453,17 @@
                         importedCount++;
                     }
                     
+                    // ▼▼▼▼▼ 10000개씩 처리 ▼▼▼▼▼
+                    const CHUNK_SIZE = 10000;
                     if (vialsToInsert.length > 0) {
-                        const { error } = await _supabase.from('vials').insert(vialsToInsert);
-                        if (error) throw error;
+                        for (let i = 0; i < vialsToInsert.length; i += CHUNK_SIZE) {
+                            const chunk = vialsToInsert.slice(i, i + CHUNK_SIZE);
+                            console.log(`Importing status chunk ${i / CHUNK_SIZE + 1}...`);
+                            const { error } = await _supabase.from('vials').insert(chunk);
+                            if (error) throw error;
+                        }
                     }
+                    // ▲▲▲▲▲ 10000개씩 처리 ▲▲▲▲▲
 
                     // 성공 메시지를 띄우기 전에 데이터를 다시 불러와 화면을 새로고침합니다.
                     await loadAllDataFromSupabase();
