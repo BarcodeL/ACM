@@ -7,6 +7,8 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
     <style>
         :root {
             --vial-occupied-bg: #60a5fa;
@@ -379,7 +381,7 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.17';
+        const APP_VERSION = '00.03.18';
         const UPDATE_DATE = '2025-08-27';
 
         // --- DOM 요소 ---
@@ -537,16 +539,16 @@
 
             // 2. 이 범용 함수를 사용해 모든 데이터를 병렬로 가져옵니다.
             const [tanksData, boxesData, vialsData, historyData, reservationsData, configData, usersData] = await Promise.all([
-                fetchAll('tanks', { order: { column: 'name', ascending: true } }),
-                fetchAll('boxes'),
-                fetchAll('vials'),
-                // 'history'는 로딩이 너무 오래 걸려서 일단 1000개로 제한. 제한 풀려면 아래 fetchAll을 활성화
-                // fetchAll('history', { order: { column: 'timestamp', ascending: false } }),
-                _supabase.from('history').select('*').order('timestamp', { ascending: false }).limit(1000),
-                _supabase.from('reservations').select('*').order('reservation_date'), // 예약은 1만건이 넘을 확률이 낮아 일단 유지
-                _supabase.from('config').select('*').eq('id', 'help_content').maybeSingle(),
-                state.loggedInUser?.role === 'admin' ? _supabase.from('profiles').select('*') : Promise.resolve({ data: [] })
-            ]);
+				fetchAll('tanks', { order: { column: 'name', ascending: true } }),
+				fetchAll('boxes'),
+				fetchAll('vials'),
+				// 'history' 테이블 대신 'sorted_history_details_view' 뷰에서 데이터를 가져옵니다.
+				// 뷰에 이미 정렬이 적용되어 있으므로 .order()는 필요 없습니다.
+				_supabase.from('sorted_history_details_view').select('*').limit(1000),
+				_supabase.from('reservations').select('*').order('reservation_date'),
+				_supabase.from('config').select('*').eq('id', 'help_content').maybeSingle(),
+				state.loggedInUser?.role === 'admin' ? _supabase.from('profiles').select('*') : Promise.resolve({ data: [] })
+			]);
 
             // 데이터 재구성 및 화면 복원 로직
             const vialsByBox = (vialsData.data || []).reduce((acc, vial) => {
@@ -2139,36 +2141,39 @@
         }
 
         function renderHistoryTable() {
-            const tableBody = document.getElementById('history-table-body');
-            tableBody.innerHTML = '';
-            state.history.forEach((log, index) => {
-                const row = document.createElement('tr');
-                const work = log.work_info || {};
-                const vial = log.vial_info || {};
-                row.innerHTML = `
-                    <td class="px-2 py-2 text-center text-sm text-gray-500">${state.history.length - index}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.workDate || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-900">${work.action || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.inOutOperator || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.processOperator || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.tankLocation || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.boxLocation || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.vialLocation || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${work.proposalId || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500 break-all">${work.workDetails || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-900">${vial.cell_name || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.vial_id || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_date || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.stock_date || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.concentration || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_operator || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_count || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500">${vial.origin || ''}</td>
-                    <td class="px-2 py-2 text-sm text-gray-500 break-all">${vial.process_details || ''}</td>
-                `;
-                tableBody.appendChild(row);
-            });
-        }
+			const tableBody = document.getElementById('history-table-body');
+			tableBody.innerHTML = '';
+			state.history.forEach((log, index) => {
+				const row = document.createElement('tr');
+				const work = log.work_info || {};
+				const vial = log.vial_info || {};
+				// team 정보도 함께 사용할 수 있도록 추가합니다.
+				const team = log.team || 'N/A';
+
+				row.innerHTML = `
+					<td class="px-2 py-2 text-center text-sm text-gray-500">${index + 1}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.workDate || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-900">${work.action || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.inOutOperator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.processOperator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.tankLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.boxLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.vialLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.proposalId || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500 break-all">${work.workDetails || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-900">${vial.cell_name || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.vial_id || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_date || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.stock_date || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.concentration || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_operator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_count || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.origin || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500 break-all">${vial.process_details || ''}</td>
+				`;
+				tableBody.appendChild(row);
+			});
+		}
         
         function exportToCsv(filename, rows) {
             if (rows.length === 0) return;
@@ -2189,65 +2194,83 @@
         }
 
         async function handleHistoryCsvExport() {
-            // 데이터가 많을 수 있으므로 사용자에게 로딩 중임을 알립니다.
-            showModal('<p class="text-center font-semibold">전체 기록을 다운로드하는 중입니다...<br>데이터 양에 따라 시간이 걸릴 수 있습니다.</p>');
+			// 데이터가 많을 수 있으므로 사용자에게 로딩 중임을 알립니다.
+			showModal('<p class="text-center font-semibold">전체 기록을 다운로드하는 중입니다...<br>데이터 양에 따라 시간이 걸릴 수 있습니다.</p>');
 
-            try {
-                let allHistory = [];
-                const CHUNK_SIZE = 1000; // 한 번에 1000개씩 데이터를 가져옵니다.
-                let from = 0;
-                let hasMore = true;
+			try {
+				let allHistory = [];
+				const CHUNK_SIZE = 1000; // 한 번에 1000개씩 데이터를 가져옵니다.
+				let from = 0;
+				let hasMore = true;
 
-                // allHistory에 모든 기록이 담길 때까지 반복해서 데이터를 가져옵니다.
-                while(hasMore) {
-                    const { data, error } = await _supabase
-                        .from('history')
-                        .select('*')
-                        .order('timestamp', { ascending: false })
-                        .range(from, from + CHUNK_SIZE - 1);
+				// allHistory에 모든 기록이 담길 때까지 반복해서 데이터를 가져옵니다.
+				while (hasMore) {
+					// ▼▼▼▼▼ 핵심 수정사항 ▼▼▼▼▼
+					// 'history' 테이블 대신 'sorted_history_details_view' 뷰에서 데이터를 가져옵니다.
+					// 뷰에 이미 정렬이 적용되어 있으므로 .order()는 필요 없습니다.
+					const { data, error } = await _supabase
+						.from('sorted_history_details_view') 
+						.select('*')
+						.range(from, from + CHUNK_SIZE - 1);
+					// ▲▲▲▲▲ 핵심 수정사항 ▲▲▲▲▲
 
-                    if (error) throw error; // 오류 발생 시 중단
+					if (error) throw error; // 오류 발생 시 중단
 
-                    if (data && data.length > 0) {
-                        allHistory = allHistory.concat(data);
-                        from += CHUNK_SIZE;
-                    }
-                    
-                    // 가져온 데이터가 CHUNK_SIZE보다 작으면 마지막 페이지이므로 반복을 멈춥니다.
-                    if (!data || data.length < CHUNK_SIZE) {
-                        hasMore = false;
-                    }
-                }
+					if (data && data.length > 0) {
+						allHistory = allHistory.concat(data);
+						from += CHUNK_SIZE;
+					}
 
-                if (allHistory.length === 0) {
-                    showCustomAlert('내보낼 기록이 없습니다.');
-                    return;
-                }
-                
-                // 가져온 전체 데이터를 사용해 CSV 파일을 생성합니다 (기존 로직과 동일).
-                const flattenedRows = allHistory.map((log, index) => {
-                    const work = log.work_info || {};
-                    const vial = log.vial_info || {};
-                    return {
-                        'No.': allHistory.length - index,
-                        '작업일': work.workDate, '작업': work.action, '입/출고작업자': work.inOutOperator, '공정작업자': work.processOperator,
-                        'Tank위치': work.tankLocation, 'Box위치': work.boxLocation, 'Vial위치': work.vialLocation,
-                        '기안번호': work.proposalId, '기타(작업내역)': work.workDetails,
-                        '세포주': vial.cell_name, 'Vial번호': vial.vial_id, '동결일': vial.freeze_date, '입고일': vial.stock_date, '농도': vial.concentration,
-                        '동결작업자': vial.freeze_operator, '동결횟수': vial.freeze_count, 'Origin': vial.origin, '기타(공정내역)': vial.process_details
-                    };
-                });
-                
-                exportToCsv(`세포주관리대장_기록_전체_${new Date().toISOString().split('T')[0]}.csv`, flattenedRows);
+					// 가져온 데이터가 CHUNK_SIZE보다 작으면 마지막 페이지이므로 반복을 멈춥니다.
+					if (!data || data.length < CHUNK_SIZE) {
+						hasMore = false;
+					}
+				}
 
-            } catch (error) {
-                console.error('Error exporting all history:', error);
-                showCustomAlert(`전체 기록을 내보내는 중 오류가 발생했습니다: ${error.message}`, 'error');
-            } finally {
-                // 작업이 성공하든 실패하든 로딩 모달 창을 닫습니다.
-                closeModal();
-            }
-        }
+				if (allHistory.length === 0) {
+					showCustomAlert('내보낼 기록이 없습니다.');
+					return;
+				}
+
+				// 가져온 전체 데이터를 사용해 CSV 파일을 생성합니다 (기존 로직과 동일).
+				const flattenedRows = allHistory.map((log, index) => {
+					const work = log.work_info || {};
+					const vial = log.vial_info || {};
+					// 뷰에서 가져온 team 정보를 추가합니다.
+					return {
+						'No.': index + 1, // 정렬된 순서대로 No.를 매깁니다.
+						'작업일': work.workDate, 
+						'작업': work.action, 
+						'입/출고작업자': work.inOutOperator, 
+						'공정작업자': work.processOperator,
+						'Tank위치': work.tankLocation, 
+						'Box위치': work.boxLocation, 
+						'Vial위치': work.vialLocation,
+						'기안번호': work.proposalId, 
+						'기타(작업내역)': work.workDetails,
+						'세포주': vial.cell_name, 
+						'Vial번호': vial.vial_id, 
+						'동결일': vial.freeze_date, 
+						'입고일': vial.stock_date, 
+						'농도': vial.concentration,
+						'동결작업자': vial.freeze_operator, 
+						'동결횟수': vial.freeze_count, 
+						'Origin': vial.origin, 
+						'기타(공정내역)': vial.process_details,
+						'팀': log.team // team 열 추가
+					};
+				});
+				
+				exportToCsv(`세포주관리대장_기록_전체_${new Date().toISOString().split('T')[0]}.csv`, flattenedRows);
+
+			} catch (error) {
+				console.error('Error exporting all history:', error);
+				showCustomAlert(`전체 기록을 내보내는 중 오류가 발생했습니다: ${error.message}`, 'error');
+			} finally {
+				// 작업이 성공하든 실패하든 로딩 모달 창을 닫습니다.
+				closeModal();
+			}
+		}
 
         function handleStatusCsvExport() {
             const allVials = [];
