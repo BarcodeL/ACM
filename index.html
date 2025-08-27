@@ -379,8 +379,8 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.16';
-        const UPDATE_DATE = '2025-08-26';
+        const APP_VERSION = '00.03.17';
+        const UPDATE_DATE = '2025-08-27';
 
         // --- DOM 요소 ---
         const loginSection = document.getElementById('login-section');
@@ -1216,7 +1216,7 @@
             const tankVisual = document.getElementById('tank-visual');
             tankVisual.innerHTML = '<h4 class="font-semibold mb-2">Rack 현황 (클릭하여 Box 확인)</h4>';
             const visualContainer = document.createElement('div');
-            visualContainer.className = 'box-visual';
+            visualContainer.className = 'box-visual max-w-[600px]';
             visualContainer.style.gridTemplateColumns = `repeat(${tank.rack_count}, 1fr)`;
 
             for (let i = 0; i < tank.rack_count; i++) {
@@ -1269,23 +1269,22 @@
         }
 
         
+        // renderBoxDetails 함수 외부에서 boxResizeObserver 변수 선언
+        let boxResizeObserver = null;
+
         function renderBoxDetails(tankId, boxId) {
             const tank = state.tanks.find(t => t.id === tankId);
             const box = tank?.boxes.find(b => b.id === boxId);
             if (!box) return;
 
-            // <<< 핵심 수정사항 시작
-            // 만약 이전에 선택했던 Box와 다른 Box를 클릭했을 경우에만 Vial 선택을 초기화합니다.
             if (state.currentSelection.boxId !== boxId) {
                 state.currentSelection.boxId = boxId;
                 state.currentSelection.vialPosition = null;
                 state.multiSelectedVials = [];
                 state.lastSelectedVialPosition = null;
             } else {
-                // 같은 Box라면, 현재 선택 상태를 유지합니다.
                 state.currentSelection.boxId = boxId;
             }
-            // <<< 핵심 수정사항 끝
             
             document.querySelectorAll('.box-slot.selected').forEach(el => el.classList.remove('selected'));
             document.getElementById(`box-slot-${boxId}`)?.classList.add('selected');
@@ -1307,19 +1306,37 @@
             `;
 
             const gridContainer = document.getElementById('vial-grid-container');
+            // HTML 레이아웃 침범 문제를 해결하기 위해, 이전에 추가했던 overflow-x-auto 클래스를 제거해야 합니다.
+            gridContainer.classList.remove('overflow-x-auto', 'custom-scrollbar');
             gridContainer.innerHTML = '';
+
             const vialGrid = document.createElement('div');
-            vialGrid.className = 'vial-grid';
-            vialGrid.style.gridTemplateColumns = `repeat(${box.box_size_x}, 1fr)`;
+            vialGrid.className = 'vial-grid max-w-[1300px] mx-auto';
+            
+            vialGrid.style.gridTemplateColumns = `repeat(${box.box_size_x}, minmax(0, 1fr))`;
+
+            if (boxResizeObserver) {
+                boxResizeObserver.disconnect();
+            }
 
             const totalPositions = box.box_size_x * box.box_size_y;
             for (let i = 1; i <= totalPositions; i++) {
                 const vialEl = document.createElement('div');
                 vialEl.className = 'vial';
                 vialEl.dataset.position = i;
-                vialEl.innerHTML = `<span class="vial-pos-number">${i}</span>`;
                 
                 const vialData = box.vials.find(v => v.position === i);
+                
+                if (vialData) {
+                    vialEl.innerHTML = `
+                        <div class="flex flex-col justify-center items-center h-full">
+                            <span class="vial-pos-number !relative text-[11px]">${i}</span>
+                            <div class="cell-name-display text-white truncate px-1 text-[9px] min-w-0" style="line-height: 1.1;">${vialData.cell_name}</div>
+                        </div>`;
+                } else {
+                    vialEl.innerHTML = `<span class="vial-pos-number">${i}</span>`;
+                }
+                
                 const reservationData = state.reservations.find(r => r.status === 'pending' && r.location.boxId === boxId && r.location.vialPosition === i);
 
                 if (vialData) vialEl.classList.add('occupied');
@@ -1334,6 +1351,27 @@
                 vialGrid.appendChild(vialEl);
             }
             gridContainer.appendChild(vialGrid);
+
+            const updateVialNameVisibility = () => {
+                const widthThreshold = 80; 
+                const vials = gridContainer.querySelectorAll('.vial');
+                vials.forEach(vial => {
+                    const nameDisplay = vial.querySelector('.cell-name-display');
+                    if (nameDisplay) {
+                        if (vial.offsetWidth < widthThreshold) {
+                            nameDisplay.classList.add('hidden');
+                        } else {
+                            nameDisplay.classList.remove('hidden');
+                        }
+                    }
+                });
+            };
+
+            boxResizeObserver = new ResizeObserver(updateVialNameVisibility);
+            boxResizeObserver.observe(gridContainer);
+            
+            updateVialNameVisibility();
+
             updateAdminUI();
         }
 
