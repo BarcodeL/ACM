@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>세포주 관리 대장 (Supabase Ver.)</title>
+    <title>세포주 관리 대장</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -381,7 +381,7 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.19';
+        const APP_VERSION = '00.03.20';
         const UPDATE_DATE = '2025-08-28';
 
         // --- DOM 요소 ---
@@ -810,6 +810,8 @@
         });
 
         document.getElementById('execute-selected-reservations-btn').addEventListener('click', () => {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
             const selectedIds = Array.from(document.querySelectorAll('.reservation-checkbox:checked')).map(cb => cb.dataset.id);
             if (selectedIds.length > 0 && confirm(`${selectedIds.length}개의 예약을 실행하시겠습니까?`)) {
                 selectedIds.forEach(id => executeReservation(id));
@@ -817,6 +819,8 @@
         });
         
         document.getElementById('cancel-selected-reservations-btn').addEventListener('click', async () => {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
             const selectedIds = Array.from(document.querySelectorAll('.reservation-checkbox:checked')).map(cb => cb.dataset.id);
             
             if (selectedIds.length === 0) return;
@@ -1549,6 +1553,7 @@
         }
         
         function showStockInModal(tankId, boxId, startPosition) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
             const today = new Date().toISOString().split('T')[0];
             const modalHTML = `
                 <h3 class="text-xl font-bold mb-4">입고 / 입고예약</h3>
@@ -1597,7 +1602,14 @@
             document.getElementById('stock-in-form').addEventListener('submit', (e) => handleStockInSubmit(e, tankId, boxId, startPosition));
         }
 
-
+        function checkObserverPermission() {
+            // state.loggedInUser.role이 'observer'로 끝나는 모든 경우를 확인합니다.
+            if (state.loggedInUser.role && (state.loggedInUser.role.endsWith('observer') || state.loggedInUser.role === 'No role')) {
+                showCustomAlert('권한이 없습니다.', 'error');
+                return false; // 권한 없음
+            }
+            return true; // 권한 있음
+        }
 
         async function handleStockInSubmit(e, tankId, boxId, startPosition) {
             e.preventDefault();
@@ -1701,6 +1713,7 @@
 
         
         function showStockOutModal() {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
             const targets = state.multiSelectedVials;
             if (!targets || targets.length === 0) return;
 
@@ -1814,6 +1827,7 @@
 
 
         async function showMoveModal(targets) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
             if (!targets || targets.length === 0) return;
 
             const tankOptions = state.tanks.map(tank => `<option value="${tank.id}">${tank.name}</option>`).join('');
@@ -2039,6 +2053,8 @@
         }
 
         async function executeReservation(reservationId) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
             const res = state.reservations.find(r => String(r.id) === reservationId);
             if (!res) {
                 console.error(`Reservation with ID ${reservationId} not found in state.`);
@@ -2086,6 +2102,8 @@
 
 
         async function cancelReservation(reservationId, operatorName = null) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
             let opName = operatorName;
 
             // operatorName이 인자로 전달되지 않았을 경우에만 이름을 묻습니다. (개별 취소 시)
@@ -2337,6 +2355,7 @@
 		}
         
         async function handleHistoryCsvImport(e, mode) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
             const file = e.target.files[0];
             if (!file) return;
             
@@ -2397,6 +2416,7 @@
         }
 
         async function handleStatusCsvImport(e) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
             if (!confirm('경고: 현황 CSV를 가져오면 현재 보관된 모든 Vial 정보가 삭제되고 파일의 내용으로 대체됩니다. 계속하시겠습니까?')) {
                 e.target.value = ''; return;
             }
