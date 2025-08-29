@@ -381,7 +381,7 @@
         }
 
         // --- 전역 변수 및 상수 ---
-        const APP_VERSION = '00.03.20';
+        const APP_VERSION = '00.03.21';
         const UPDATE_DATE = '2025-08-28';
 
         // --- DOM 요소 ---
@@ -2066,7 +2066,7 @@
             
             // 작업일(workDate)을 예약했던 날짜(reservation_date)로 설정
             res.details.workInfo.workDate = res.reservation_date;
-            res.details.workInfo.action = res.type === 'in' ? '예약입고' : '예약출고';
+            res.details.workInfo.action = res.type === 'in' ? '입고' : '출고';
             res.details.workInfo.userEmail = state.loggedInUser.email;
 
             const historyLog = {
