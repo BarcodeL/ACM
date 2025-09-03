@@ -1,0 +1,19 @@
+name: Supabase Project Ping
+
+on:
+  schedule:
+    # 3일에 한 번씩 자정(UTC 기준)에 실행
+    - cron: '0 0 */3 * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase URL
+        # curl 명령어로 Supabase API에 간단한 조회 요청을 보냅니다.
+        # RLS(행 수준 보안)가 비활성화된 public 테이블 중 하나를 가볍게 읽는 것이 좋습니다.
+        run: |
+          curl -i -X GET \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "https://gyehophknpfwheywfcpk.supabase.co/rest/v1/tanks?select=id&limit=1"
