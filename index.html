@@ -2,10 +2,2945 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=https://barcodel.github.io/ART-Cell-Manager/">
-    <title>페이지 이동 중...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세포주 관리 대장</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+    <style>
+        :root {
+            --vial-occupied-bg: #60a5fa;
+            --vial-empty-bg: #f9fafb;
+            --vial-reserved-in-bg: #a7f3d0;
+            --vial-reserved-out-bg: #fecaca;
+            --vial-selected-border: #0ea5e9;
+            --vial-group-shadow: #fbbf24;
+            --vial-multi-selected-bg: #f59e0b;
+        }
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+        .main-content { display: none; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .modal-background {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .vial-grid { display: grid; gap: 3px; }
+        .vial {
+            width: 100%;
+            aspect-ratio: 3 / 1;
+            border: 1px solid #e5e7eb;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.6rem;
+            font-weight: 500;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .vial .vial-pos-number { position: absolute; color: #9ca3af; }
+        .vial.empty { background-color: var(--vial-empty-bg); }
+        .vial.empty:hover { background-color: #e0f2fe; }
+        .vial.occupied { background-color: var(--vial-occupied-bg); }
+        .vial.occupied .vial-pos-number { color: rgba(255,255,255,0.6); }
+        .vial.occupied.selected-group { box-shadow: 0 0 0 3px var(--vial-group-shadow); z-index: 10; }
+        .vial.reserved-in { background-color: var(--vial-reserved-in-bg); }
+        .vial.reserved-out { background-color: var(--vial-reserved-out-bg); }
+        .vial.selected { border: 2px solid var(--vial-selected-border); transform: scale(1.1); z-index: 5; }
+        .vial.multi-selected { background-color: var(--vial-multi-selected-bg); border-color: #d97706; }
+        .vial.multi-selected .vial-pos-number { color: white; }
+        .box-visual { display: grid; gap: 12px; }
+        .rack-visual { display: flex; flex-direction: column-reverse; gap: 5px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; align-items: center; transition: all 0.2s; }
+        .rack-visual.selected { border-color: var(--vial-selected-border); box-shadow: 0 0 8px rgba(14, 165, 233, 0.5); }
+        .rack-label { font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; }
+        .box-slot { background-color: #e5e7eb; height: 20px; width: 100%; border-radius: 3px; cursor: pointer; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: #4b5563; }
+        .box-slot.occupied { background-color: #3b82f6; color: white; }
+        .box-slot:hover { background-color: #93c5fd; }
+        .box-slot.selected { outline: 2px solid var(--vial-selected-border); outline-offset: 2px; }
+        /* ▼▼▼▼▼ Box progress bar ▼▼▼▼▼ */
+        .box-slot {
+            background-color: #e5e7eb; /* 프로그레스 바의 배경색 (회색) */
+            position: relative;
+            overflow: hidden;
+        }
+        .box-slot .fill {
+            background-color: #3b82f6; /* 채워지는 바의 색상 (파란색) */
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            height: 100%;
+            transition: width 0.3s ease; /* 너비가 부드럽게 변하는 효과 */
+        }
+        .box-slot .label {
+            position: relative; /* 바(fill) 위에 글씨가 보이도록 설정 */
+            font-weight: 900;
+            mix-blend-mode: difference; /* 배경색과 글자색이 반전되어 항상 잘 보이게 함 */
+            /* filter: invert(1) grayscale(1) contrast(100)  ; */
+        }
+        /* ▲▲▲▲▲ Box progress bar ▲▲▲▲▲ */
+        .qa-set { border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
+        .qa-set:last-child { border-bottom: none; margin-bottom: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+        #vial-info-display p { word-break: break-all; }
+        .admin-only { display: none; }
+
+        .chat-message { max-width: 80%; }
+        .chat-message .message-content {
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            margin-top: 0.25rem;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+        .chat-message.user {
+            margin-left: auto;
+            text-align: right;
+        }
+        .chat-message.user .message-content { background-color: #3b82f6; color: white; }
+        .chat-message.bot .message-content { background-color: #f3f4f6; color: #1f2937; }
+        .chat-message.loading .message-content { background-color: #f3f4f6; color: #6b7280; font-style: italic; }
+        
+    </style>
 </head>
-<body>
-    <p>페이지로 이동하고 있습니다. 만약 자동으로 이동하지 않으면 <a href="https://barcodel.github.io/ART-Cell-Manager/">여기를 클릭하세요</a>.</p>
+<body class="bg-gray-100">
+
+    <div id="userInfoDisplay" style="white-space: pre-line;"></div>
+
+    <div id="login-section" class="flex items-center justify-center min-h-screen">
+        <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+            <h1 class="text-2xl font-bold text-center text-gray-800">세포주 관리 대장</h1>
+            <div class="space-y-4">
+                <div>
+                    <label for="username" class="text-sm font-medium text-gray-700">이메일</label>
+                    <input type="email" id="username" class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="이메일 주소를 입력하세요">
+                </div>
+                <div>
+                    <label for="password" class="text-sm font-medium text-gray-700">비밀번호</label>
+                    <input type="password" id="password" class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="비밀번호를 입력하세요">
+                </div>
+            </div>
+            <button id="login-btn" class="w-full px-4 py-2 font-semibold text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                로그인
+            </button>
+            <div class="flex items-center justify-between text-sm">
+                <a href="#" id="register-link" class="font-medium text-blue-600 hover:text-blue-500">사용자 등록</a>
+                <a href="#" id="forgot-password-link" class="font-medium text-blue-600 hover:text-blue-500">비밀번호 찾기</a>
+            </div>
+            <p id="login-error" class="text-sm text-center text-red-500"></p>
+        </div>
+    </div>
+
+    <div id="main-content" class="main-content">
+        <div class="flex h-screen">
+            <aside class="w-20 lg:w-60 text-white bg-gray-800 transition-all duration-300">
+                <div class="p-4">
+                    <h1 class="text-xl font-bold hidden lg:block">세포주 관리</h1>
+                    <h1 class="text-2xl font-bold lg:hidden text-center text-white"><i class="fas fa-tasks"></i></h1>
+                </div>
+                <nav class="mt-4">
+                    <a href="#status" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-chart-pie lg:mr-3"></i><span class="hidden lg:inline">현황 및 관리</span></a>
+                    <a href="#reservations" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-calendar-check lg:mr-3"></i><span class="hidden lg:inline">예약 목록</span></a>
+                    <a href="#search" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-search lg:mr-3"></i><span class="hidden lg:inline">검색</span></a>
+                    <a href="#history" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-history lg:mr-3"></i><span class="hidden lg:inline">이전 기록 확인</span></a>
+                    <a href="#help" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-question-circle lg:mr-3"></i><span class="hidden lg:inline">도움말</span></a>
+                    <a href="#info" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-info-circle lg:mr-3"></i><span class="hidden lg:inline">정보</span></a>
+					<a href="#ai-chat" class="nav-link flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white">
+                        <i class="w-6 fas fa-robot lg:mr-3"></i><span class="hidden lg:inline">AI 어시스턴트</span>
+                    </a>
+                    <a href="#user-admin" class="nav-link admin-only flex items-center justify-center lg:justify-start px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white"><i class="w-6 fas fa-users-cog lg:mr-3"></i><span class="hidden lg:inline">사용자 관리</span></a>
+                </nav>
+                <div class="absolute bottom-0 w-20 lg:w-60 p-4 transition-all duration-300">
+                    <div id="user-info" class="text-sm text-gray-400 truncate"></div>
+                    <button id="logout-btn" class="w-full px-4 py-2 mt-2 text-sm font-semibold text-white bg-red-500 rounded-md hover:bg-red-600">
+                        <i class="fas fa-sign-out-alt lg:hidden"></i>
+                        <span class="hidden lg:inline">로그아웃</span>
+                    </button>
+                </div>
+            </aside>
+
+            <main class="flex-1 p-4 sm:p-6 overflow-y-auto bg-gray-100">
+                 <div id="status-page" class="page active">
+                    <h2 class="text-2xl font-bold text-gray-800">현황 및 관리</h2>
+                     <div class="flex items-center my-4 space-x-2">
+                        <button id="export-status-csv" class="px-4 py-2 text-sm font-semibold text-white bg-blue-500 rounded-md hover:bg-blue-600">현황 내보내기 (CSV)</button>
+                        <button id="import-status-csv" class="admin-only px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">현황 가져오기 (CSV)</button>
+                        <input type="file" id="import-status-input" class="hidden" accept=".csv">
+                    </div>
+                    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                        <div class="lg:col-span-1">
+                            <div class="p-4 bg-white rounded-lg shadow">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold">보관 장비 목록</h3>
+                                    <button id="add-tank-btn" class="admin-only px-3 py-1 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600">+</button>
+                                </div>
+                                <ul id="tank-list" class="mt-4 space-y-2"></ul>
+                            </div>
+                        </div>
+                        <div id="tank-details-section" class="hidden lg:col-span-2">
+                            <div class="p-4 bg-white rounded-lg shadow">
+                                <h3 id="tank-details-title" class="text-lg font-semibold">장비 상세 정보</h3>
+                                <div id="tank-info" class="mt-4 space-y-2 text-sm"></div>
+                                <div id="tank-visual" class="mt-4"></div>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-3">
+                        <div id="box-details-section" class="hidden lg:col-span-2">
+                            <div class="p-4 bg-white rounded-lg shadow">
+                                <div class="flex items-center justify-between">
+                                    <h3 id="box-details-title" class="text-lg font-semibold">Box 상세 정보</h3>
+                                    <button id="change-box-spec-btn" class="admin-only px-3 py-1 text-sm text-white bg-indigo-500 rounded-md hover:bg-indigo-600">규격 변경</button>
+                                </div>
+                                <div id="vial-grid-legend" class="flex flex-wrap gap-x-4 gap-y-1 my-3 text-xs"></div>
+                                <div id="vial-grid-container" class="mt-4"></div>
+                            </div>
+                        </div>
+                        <div id="vial-details-section" class="hidden lg:col-span-1">
+                            <div class="p-4 bg-white rounded-lg shadow">
+                                <h3 id="vial-details-title" class="text-lg font-semibold">Vial 상세 정보</h3>
+                                <div id="vial-info-display" class="mt-4 text-sm max-h-96 overflow-y-auto custom-scrollbar"></div>
+                                <div id="vial-actions" class="mt-4 space-y-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="reservations-page" class="page">
+                    <h2 class="text-2xl font-bold text-gray-800">입/출고 예약 목록</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow">
+                         <div class="flex items-center mb-4 space-x-4">
+                            <button id="execute-selected-reservations-btn" class="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 disabled:bg-gray-400" disabled>선택 항목 실행</button>
+                            <button id="cancel-selected-reservations-btn" class="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-md hover:bg-red-600 disabled:bg-gray-400" disabled>선택 항목 취소</button>
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="w-12 px-6 py-3 text-left"><input type="checkbox" id="select-all-reservations"></th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">종류</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">세포주</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">위치</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">기안번호</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">예약일</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reservations-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="search-page" class="page">
+                    <h2 class="text-2xl font-bold text-gray-800">세포주 검색</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow">
+                        <div class="relative">
+                            <input type="text" id="search-input" class="w-full p-2 border border-gray-300 rounded-md" placeholder="세포주 명을 입력하세요...">
+                            <ul id="autocomplete-list" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg"></ul>
+                        </div>
+                        <div id="search-results-summary" class="mt-4"></div>
+                        <div id="search-results-container" class="mt-4 overflow-x-auto custom-scrollbar"></div>
+                    </div>
+                </div>
+
+                <div id="history-page" class="page">
+                    <h2 class="text-2xl font-bold text-gray-800">이전 기록 확인</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow flex flex-col" style="height: calc(100vh - 8rem);">
+                        <div class="p-3 mb-4 text-sm text-yellow-800 bg-yellow-100 border-l-4 border-yellow-500" role="alert">
+                            <!-- 10,000개 로딩이 너무 오래 걸려 비활성화. -->
+                            <!-- <p><i class="fas fa-info-circle mr-2"></i>화면에는 최근 10,000개의 작업만 표시됩니다. 모든 기록을 확인하시려면 [CSV로 내보내기] 버튼을 사용해주세요.</p> -->
+                            <p><i class="fas fa-info-circle mr-2"></i>화면에는 최근 1,000개의 작업만 표시됩니다. 모든 기록을 확인하시려면 [CSV로 내보내기] 버튼을 사용해주세요.</p>
+                        </div>
+                        <div class="flex items-center mb-4 space-x-2">
+                            <button id="export-history-csv" class="px-4 py-2 text-sm font-semibold text-white bg-blue-500 rounded-md hover:bg-blue-600">CSV로 내보내기</button>
+                            <button id="import-history-add-csv" class="admin-only px-4 py-2 text-sm font-semibold text-white bg-orange-500 rounded-md hover:bg-orange-600">CSV로 추가하기</button>
+                            <input type="file" id="import-history-add-input" class="hidden" accept=".csv">
+                            <button id="import-history-overwrite-csv" class="admin-only px-4 py-2 text-sm font-semibold text-white bg-purple-500 rounded-md hover:bg-purple-600">CSV로 가져오기 (덮어쓰기)</button>
+                            <input type="file" id="import-history-overwrite-input" class="hidden" accept=".csv">
+                        </div>
+                        <div class="overflow-auto custom-scrollbar flex-grow">
+                            <table class="divide-y divide-gray-200 table-fixed min-w-[2500px]">
+                                <thead class="bg-gray-50 sticky top-0 z-10">
+                                    <tr>
+                                        <th rowspan="2" class="px-2 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase align-middle w-12">No.</th>
+                                        <th colspan="9" class="px-2 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">작업 정보</th>
+                                        <th colspan="9" class="px-2 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Vial 정보</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">작업일</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-20">작업</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">입/출고작업자</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">공정작업자</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">Tank위치</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-20">Box위치</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-20">Vial위치</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-40">기안번호</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-[40rem]">기타(작업내역)</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-40">세포주</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-24">Vial번호</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">동결일</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">입고일</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">농도</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">동결작업자</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-24">동결횟수</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-28">Origin</th>
+                                        <th class="px-2 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase w-[40rem]">기타(공정내역)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="help-page" class="page">
+                    <h2 class="text-2xl font-bold text-gray-800">도움말</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow">
+                        <div id="help-content-display" class="prose max-w-none"></div>
+                        <div id="help-content-edit" class="hidden">
+                            <textarea id="help-textarea" class="w-full h-96 p-2 border rounded"></textarea>
+                            <div class="mt-2 text-right">
+                                <button id="cancel-help-edit-btn" class="px-4 py-2 bg-gray-300 rounded">취소</button>
+                                <button id="save-help-edit-btn" class="px-4 py-2 text-white bg-blue-500 rounded ml-2">저장</button>
+                            </div>
+                        </div>
+                        <div class="mt-4 admin-only">
+                            <button id="edit-help-btn" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-500 rounded-md hover:bg-indigo-600">도움말 수정</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="info-page" class="page">
+                    <h2 class="text-2xl font-bold text-gray-800">정보</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow">
+                        <div id="info-content-display"></div>
+                    </div>
+                </div>
+
+                <div id="user-admin-page" class="page admin-only">
+                    <h2 class="text-2xl font-bold text-gray-800">사용자 관리</h2>
+                    <div class="p-4 mt-4 bg-white rounded-lg shadow">
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">사용자 이메일</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">역할</th>
+                                        <th class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">권한 변경</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="user-list-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="ai-chat-page" class="page">
+                    <header class="p-4 border-b bg-white rounded-t-lg">
+                        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
+                            <i class="fas fa-robot mr-3 text-blue-500"></i> AI 어시스턴트
+                        </h1>
+                        <p class="text-sm text-gray-500 mt-1">세포주 관리 대장 데이터에 대해 질문하세요.</p>
+                    </header>
+                    <div class="flex flex-col bg-white rounded-b-lg shadow" style="height: calc(100vh - 10rem);">
+                        <main class="flex-grow p-4 overflow-y-auto custom-scrollbar" id="chat-history">
+                            <div class="chat-message bot">
+                                <p class="font-bold text-sm text-gray-600">AI 어시스턴트</p>
+                                <div class="message-content">
+                                    <p>안녕하세요! "세포주 관리 대장" 데이터베이스의 요약 정보를 바탕으로 답변해 드립니다. 제가 분석하는 데이터는 다음과 같습니다.</p>
+                                    <ol class="list-decimal list-inside space-y-2 mt-4 text-sm">
+                                        <li>
+                                            <strong>업무 절차 및 도움말:</strong>
+                                            <p class="pl-5 text-gray-600">관리자가 입력한 공식 업무 절차 및 도움말 정보입니다.</p>
+                                        </li>
+                                        <li>
+                                            <strong>전체 기록 및 세포주별 통계:</strong>
+                                            <p class="pl-5 text-gray-600">누적 입고/출고 건수 및 세포주별 상세 통계입니다.</p>
+                                        </li>
+                                        <li>
+                                            <strong>최근 작업 기록 (최신 10개):</strong>
+                                            <p class="pl-5 text-gray-600">가장 최근에 발생한 10건의 작업 기록입니다.</p>
+                                        </li>
+                                    </ol>
+                                    <p class="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
+                                        <strong>참고:</strong> 위 요약 정보에 포함되지 않은 세부 내용(예: 특정 Vial의 상세 정보, 10건 이전의 과거 기록 등)에 대해서는 답변이 어려울 수 있습니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </main>
+                        <footer class="p-4 border-t bg-gray-50">
+                            <form id="chat-form" class="flex items-center space-x-3">
+                                <input type="text" id="chat-input" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="메시지를 입력하세요..." autocomplete="off">
+                                <button type="submit" id="chat-send-btn" class="px-5 py-3 font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:bg-gray-400">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </form>
+                        </footer>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div id="modal-container" class="modal-background">
+        <div id="modal-content" class="modal-content custom-scrollbar"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        // ※ 중요: 백앤드 연결 ※
+        const SUPABASE_URL = 'https://gyehophknpfwheywfcpk.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5ZWhvcGhrbnBmd2hleXdmY3BrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2MjM4ODIsImV4cCI6MjA3MTE5OTg4Mn0.MAUZiMhQaRWIeWDUPRjoSTC_NVwTZnrzRQhMrOeYHCM';
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        const { createClient } = supabase;
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // 알림창 제어 함수
+        let toastTimeout;
+        function showToast(message) {
+            const toast = document.getElementById('toast-notification');
+            const toastMessage = document.getElementById('toast-message');
+            
+            if (toastTimeout) {
+                clearTimeout(toastTimeout);
+            }
+
+            toastMessage.innerHTML = `<i class="fas fa-bell mr-2"></i> ${message}`;
+            toast.style.opacity = '1';
+
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 5000); // 5초 후에 자동으로 사라집니다.
+        }
+
+        // --- 전역 변수 및 상수 ---
+        const APP_VERSION = '00.04.01';
+        const UPDATE_DATE = '2025-09-01';
+
+        // --- DOM 요소 ---
+        const loginSection = document.getElementById('login-section');
+        const mainContent = document.getElementById('main-content');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginError = document.getElementById('login-error');
+        const registerLink = document.getElementById('register-link');
+        const forgotPasswordLink = document.getElementById('forgot-password-link');
+        const userInfoDisplay = document.getElementById('user-info');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const pages = document.querySelectorAll('.page');
+        const modalContainer = document.getElementById('modal-container');
+        const modalContent = document.getElementById('modal-content');
+
+        // --- 상태 관리 (State) ---
+        let state = {
+            loggedInUser: null,
+            allUsers: [], 
+            tanks: [],
+            history: [],
+            reservations: [],
+            helpContent: '',
+            infoContent: '',
+            currentSelection: { tankId: null, boxId: null, vialPosition: null },
+            multiSelectedVials: [],
+            lastSelectedVialPosition: null,
+            searchQuery: '', // <<< 검색어를 저장할 공간
+        };
+        
+        // Supabase Realtime 구독 채널
+        let realtimeChannels = [];
+
+        // ※ 자동 로그아웃 기능 ※
+        window.addEventListener('beforeunload', async () => {
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (session) {
+                await _supabase.auth.signOut();
+            }
+        });
+
+        // --- 핵심 로직: 인증 상태 감지 (Realtime 우선 연결 방식으로 수정) ---
+        _supabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+					const newPassword = prompt("새 비밀번호를 입력하세요 (6자리 이상):");
+					if (newPassword) {
+						const { error } = await _supabase.auth.updateUser({ password: newPassword });
+						if (error) {
+							showCustomAlert("비밀번호 변경 실패: " + error.message, "error");
+						} else {
+							showCustomAlert("비밀번호가 성공적으로 변경되었습니다. 다시 로그인해주세요.", "success");
+							await _supabase.auth.signOut(); // 보안을 위해 로그아웃 후 다시 로그인 유도
+						}
+					}
+					return; // 다른 분기 실행하지 않고 종료
+				}
+			
+			if ((event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') && !session) {
+                showLoginSection();
+                return;
+            }
+
+            if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session)) {
+                console.log('로그인 감지! Realtime 채널 연결을 시작합니다.');
+                
+                const bootstrapChannel = _supabase.channel('bootstrap');
+                
+                bootstrapChannel.subscribe(async (status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime 채널 연결 성공. 이제 프로필 및 데이터 조회를 시작합니다.');
+                        _supabase.removeChannel(bootstrapChannel); // 연결 후 바로 제거
+
+                        // ▼▼▼▼▼ 여기부터 수정된 부분입니다 ▼▼▼▼▼
+                        // 로딩 모달을 먼저 띄웁니다.
+                        //showModal('<p class="text-center font-semibold"><i class="fas fa-spinner fa-spin mr-2"></i>데이터를 불러오는 중입니다...</p>');
+
+                        try {
+                            const user = session.user;
+                            const { data: profile, error: profileError } = await _supabase
+                                .from('profiles')
+                                .select('role')
+                                .eq('id', user.id)
+                                .maybeSingle();
+
+                            if (profileError) { throw profileError; }
+
+                            state.loggedInUser = {
+                                email: user.email,
+                                id: user.id,
+                                role: profile ? profile.role : '알 수 없음'
+                            };
+
+                            showMainContent();
+                            await loadAllDataFromSupabase(); // 데이터 로딩
+                            initializeRealtimeSubscriptions();
+
+                        } catch (error) {
+                            console.error('프로필 또는 데이터 조회 과정에서 오류 발생:', error);
+                            showCustomAlert(`데이터를 불러오는 데 실패했습니다: ${error.message}`, 'error');
+                            await _supabase.auth.signOut();
+                        } finally {
+                            // 데이터 로딩이 성공하든 실패하든 마지막에 로딩 모달을 닫습니다.
+                            //closeModal();
+                        }
+                        // ▲▲▲▲▲ 여기까지 수정된 부분입니다 ▲▲▲▲▲
+
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Realtime 채널 연결 실패. 상태:', status);
+                        showCustomAlert('서버와 실시간 연결에 실패했습니다. 네트워크 상태를 확인하세요.', 'error');
+                        await _supabase.auth.signOut();
+                    }
+                });
+            }
+        });
+
+        // --- 데이터 로딩 ---
+        async function loadAllDataFromSupabase() {
+            const previousSelection = { ...state.currentSelection };
+            const previousSearchQuery = state.searchQuery;
+
+            // 1. 어떤 테이블이든 전체 데이터를 안전하게 가져오는 범용 함수를 정의합니다.
+            const fetchAll = async (tableName, options = {}) => {
+                let allData = [];
+                const CHUNK_SIZE = 1000;
+                let from = 0;
+                let hasMore = true;
+
+                while (hasMore) {
+                    // Supabase 쿼리를 생성합니다.
+                    let query = _supabase.from(tableName).select('*').range(from, from + CHUNK_SIZE - 1);
+
+                    // 정렬 옵션이 있다면 쿼리에 추가합니다.
+                    if (options.order) {
+                        query = query.order(options.order.column, { ascending: options.order.ascending });
+                    }
+
+                    const { data, error } = await query;
+                    if (error) throw error;
+
+                    if (data && data.length > 0) {
+                        allData = allData.concat(data);
+                        from += data.length;
+                    }
+                    
+                    // 가져온 데이터가 1000개 미만이면 마지막 페이지이므로 반복을 멈춥니다.
+                    if (!data || data.length < CHUNK_SIZE) {
+                        hasMore = false;
+                    }
+                }
+                return { data: allData }; // Promise.all 형식에 맞게 객체로 반환
+            };
+
+            // 2. 이 범용 함수를 사용해 모든 데이터를 병렬로 가져옵니다.
+            const [tanksData, boxesData, vialsData, historyData, reservationsData, configData, usersData] = await Promise.all([
+				fetchAll('tanks', { order: { column: 'name', ascending: true } }),
+				fetchAll('boxes'),
+				fetchAll('vials'),
+				// 'history' 테이블 대신 'sorted_history_details_view' 뷰에서 데이터를 가져옵니다.
+				// 뷰에 이미 정렬이 적용되어 있으므로 .order()는 필요 없습니다.
+				_supabase.from('sorted_history_details_view').select('*').limit(1000),
+				_supabase.from('reservations').select('*').order('reservation_date'),
+				_supabase.from('config').select('*').eq('id', 'help_content').maybeSingle(),
+				state.loggedInUser?.role === 'admin' ? _supabase.from('profiles').select('*') : Promise.resolve({ data: [] })
+			]);
+
+            // 데이터 재구성 및 화면 복원 로직
+            const vialsByBox = (vialsData.data || []).reduce((acc, vial) => {
+                if (!acc[vial.box_id]) acc[vial.box_id] = [];
+                acc[vial.box_id].push(vial);
+                return acc;
+            }, {});
+            const boxesByTank = (boxesData.data || []).reduce((acc, box) => {
+                box.vials = vialsByBox[box.id] || [];
+                if (!acc[box.tank_id]) acc[box.tank_id] = [];
+                acc[box.tank_id].push(box);
+                return acc;
+            }, {});
+            state.tanks = (tanksData.data || []).map(tank => {
+                tank.boxes = boxesByTank[tank.id] || [];
+                return tank;
+            });
+            state.history = historyData.data || [];
+            state.reservations = reservationsData.data || [];
+            state.allUsers = usersData.data || [];
+            if (configData.data) {
+                state.helpContent = configData.data.content || getInitialHelpContent();
+            } else {
+                state.helpContent = getInitialHelpContent();
+                if(state.loggedInUser.role === 'admin') {
+                    await _supabase.from('config').insert({ id: 'help_content', content: state.helpContent });
+                }
+            }
+
+            const activePageId = document.querySelector('.page.active')?.id.replace('-page', '');
+            if (activePageId) {
+                navigateTo(activePageId, true); 
+
+                if (activePageId === 'status' && previousSelection.tankId) {
+                    setTimeout(() => {
+                        renderTankDetails(previousSelection.tankId);
+                        if (previousSelection.boxId) {
+                            renderBoxDetails(previousSelection.tankId, previousSelection.boxId);
+                            
+                            if (previousSelection.vialPosition) {
+                                const vialEl = document.querySelector(`.vial[data-position='${previousSelection.vialPosition}']`);
+                                if (vialEl) {
+                                    vialEl.click();
+                                }
+                            }
+                        }
+                    }, 10);
+                }
+                
+                if (activePageId === 'search' && previousSearchQuery) {
+                    const searchInput = document.getElementById('search-input');
+                    searchInput.value = previousSearchQuery;
+                    handleSearch({ target: searchInput });
+                }
+            }
+        }
+
+
+
+        
+        function initializeRealtimeSubscriptions() {
+            unsubscribeAllRealtime(); // 기존 구독 정리
+
+            const handleDbChange = async (payload) => {
+                console.log('Database change detected:', payload);
+                
+                /* 모달창이 열려있을 때만 알림을 표시하고 싶으면 해당 코드 활성화
+                // 현재 모달창이 열려있는지 확인합니다.
+                const isModalOpen = document.getElementById('modal-container').style.display === 'flex';
+                if (isModalOpen) {
+                    console.log('모달창이 열려있어 전체 새로고침을 막고 알림을 표시합니다.');
+                    // 데이터를 날리지 않도록 새로고침 대신 작은 알림창만 띄웁니다.
+                    showToast('누군가가 데이터를 변경하였습니다. 작업을 마친 후 확인해주세요.');
+                    return; // 여기서 함수를 중단시켜 새로고침을 방지합니다.
+                }
+                */
+
+                // ▼▼▼▼▼모달창과 상관없이 항상 알림을 띄울 때 해당 코드 활성화▼▼▼▼
+                showToast('누군가가 데이터를 변경했습니다. 최신 데이터로 갱신됩니다.');
+
+                const isModalOpen = document.getElementById('modal-container').style.display === 'flex';
+                if (isModalOpen) {
+                    console.log('모달창이 열려있어 전체 새로고침을 막습니다.');
+                    return; // 모달 열려 있으면 알람만 띄우고 리프레시 안 함
+                }
+                // ▲▲▲▲여기까지▲▲▲▲
+
+                showModal('<p class="text-center font-semibold"><i class="fas fa-sync fa-spin mr-2"></i>데이터를 새로고침하는 중...</p>');
+                
+                try {
+                    await loadAllDataFromSupabase(); 
+                } catch (error) {
+                    console.error('Error reloading data on DB change:', error);
+                    showCustomAlert('데이터를 새로고침하는 데 실패했습니다.', 'error');
+                } finally {
+                    closeModal();
+                }
+            };
+            
+            const tablesToSubscribe = ['tanks', 'boxes', 'vials', 'reservations', 'config'];
+            if(state.loggedInUser?.role === 'admin') {
+                tablesToSubscribe.push('profiles');
+            }
+
+            tablesToSubscribe.forEach(table => {
+                const channel = _supabase.channel(`public:${table}`)
+                    .on('postgres_changes', { event: '*', schema: 'public', table: table }, handleDbChange)
+                    .subscribe();
+                realtimeChannels.push(channel);
+            });
+            console.log(`Initialized ${realtimeChannels.length} realtime subscriptions for: ${tablesToSubscribe.join(', ')}`);
+        }
+
+
+
+        function unsubscribeAllRealtime() {
+            if (realtimeChannels.length > 0) {
+                console.log(`Unsubscribing from ${realtimeChannels.length} channels.`);
+                realtimeChannels.forEach(channel => _supabase.removeChannel(channel));
+                realtimeChannels = [];
+            }
+        }
+        
+        // --- 로그인 및 인증 ---
+        async function handleLogin() {
+            const email = usernameInput.value.trim();
+            const password = passwordInput.value;
+            loginError.textContent = '';
+
+            // 로딩 상태 시작
+            loginBtn.disabled = true;
+            loginBtn.textContent = '로그인 중...';
+
+            const { error } = await _supabase.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                loginError.textContent = '이메일 또는 비밀번호가 올바르지 않습니다.';
+                console.error('Login error:', error.message);
+                
+                // 오류 발생 시 버튼 복구
+                loginBtn.disabled = false;
+                loginBtn.textContent = '로그인';
+            }
+            // 성공 시에는 아무것도 하지 않습니다.
+            // onAuthStateChange 리스너가 감지하여 자동으로 메인 화면으로 전환합니다.
+        }
+
+		async function handleLogout() {
+			if (confirm('로그아웃 하시겠습니까?')) {
+				const { error } = await _supabase.auth.signOut();
+				if (error && error.message !== 'Auth session missing!') {
+					// 진짜 오류만 표시
+					console.error('Logout error:', error);
+					showCustomAlert("로그아웃 실패: " + error.message, 'error');
+				} else {
+					// 정상 로그아웃 or 이미 세션 없음 → UI 초기화
+					const loginBtn = document.getElementById('login-btn'); 
+					if (loginBtn) {
+						loginBtn.disabled = false;
+						loginBtn.textContent = '로그인';
+					}
+					showLoginSection(); // 로그인 화면으로 전환
+				}
+			}
+		}
+
+        // --- 이벤트 리스너 연결 ---
+        loginBtn.addEventListener('click', handleLogin);
+        passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+        logoutBtn.addEventListener('click', handleLogout);
+
+        registerLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = prompt("사용할 이메일 주소를 입력하세요:");
+            if (!email) return;
+            const password = prompt("사용할 비밀번호를 입력하세요 (6자리 이상):");
+            if (!password || password.length < 6) {
+                showCustomAlert('비밀번호는 6자리 이상이어야 합니다.', 'error');
+                return;
+            }
+
+            // 1. Supabase Authentication에 사용자를 등록합니다.
+            const { data, error: signUpError } = await _supabase.auth.signUp({ email, password });
+
+            if (signUpError) {
+                if (signUpError.message.includes('User already registered')) {
+                    showCustomAlert('이미 사용 중인 이메일입니다.', 'error');
+                } else {
+                    showCustomAlert("등록 실패: " + signUpError.message, 'error');
+                }
+                return; // 오류 발생 시 여기서 중단
+            }
+            showCustomAlert("사용자 등록이 완료되었습니다. 권한 부여는 관리자에게 문의해주세요.", 'success');
+
+            // 2. 회원가입이 성공하면, 반환된 user 정보를 사용하여 profiles 테이블에 데이터를 추가합니다.
+            /*if (data.user) {
+                const { error: insertError } = await _supabase
+                    .from('profiles')
+                    .insert({ 
+                        id: data.user.id,       // auth에서 받은 user id 사용
+                        email: data.user.email, // auth에서 받은 email 사용
+                        role: '관리자 문의'        // 기본 역할(role)을 '관리자 문의'로 지정
+                    });
+
+                if (insertError) {
+                    // profiles 테이블에 삽입 실패 시 오류 메시지를 표시합니다.
+                    showCustomAlert(`프로필 생성 실패: ${insertError.message}`, 'error');
+                    // (선택) 이 경우 auth에 생성된 사용자를 수동으로 삭제해야 할 수 있습니다.
+                } else {
+                    // 모든 과정이 성공하면 사용자에게 이메일 인증을 안내합니다.
+                    showCustomAlert("사용자 등록이 완료되었습니다. 권한 부여는 관리자에게 문의해주세요.", 'success');
+                }
+            }*/
+        });
+
+        forgotPasswordLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = prompt("비밀번호를 재설정할 이메일 주소를 입력하세요:");
+            if (email) {
+                const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.href.split('#')[0] // Redirect back to the app after reset
+                });
+                if (error) {
+                    showCustomAlert("이메일 전송에 실패했습니다: " + error.message, 'error');
+                } else {
+                    showCustomAlert("비밀번호 재설정 이메일을 보냈습니다. 메일함을 확인해주세요.", 'success');
+                }
+            }
+        });
+        
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                navigateTo(e.currentTarget.getAttribute('href').substring(1));
+            });
+        });
+
+        document.getElementById('add-tank-btn').addEventListener('click', showAddTankModal);
+        document.getElementById('export-status-csv').addEventListener('click', handleStatusCsvExport);
+        document.getElementById('import-status-csv').addEventListener('click', () => document.getElementById('import-status-input').click());
+        document.getElementById('import-status-input').addEventListener('change', handleStatusCsvImport);
+        document.getElementById('export-history-csv').addEventListener('click', handleHistoryCsvExport);
+        document.getElementById('import-history-add-csv').addEventListener('click', () => document.getElementById('import-history-add-input').click());
+        document.getElementById('import-history-add-input').addEventListener('change', (e) => handleHistoryCsvImport(e, 'add'));
+        document.getElementById('import-history-overwrite-csv').addEventListener('click', () => document.getElementById('import-history-overwrite-input').click());
+        document.getElementById('import-history-overwrite-input').addEventListener('change', (e) => handleHistoryCsvImport(e, 'overwrite'));
+        document.getElementById('edit-help-btn').addEventListener('click', showHelpEditMode);
+        document.getElementById('cancel-help-edit-btn').addEventListener('click', hideHelpEditMode);
+        document.getElementById('save-help-edit-btn').addEventListener('click', saveHelpContent);
+        document.getElementById('search-input').addEventListener('input', handleSearch);
+        // AI 채팅 입력 폼의 submit 이벤트를 handleSendMessage 함수와 연결
+        document.getElementById('main-content').addEventListener('submit', function(event) {
+            if (event.target.id === 'chat-form') {
+                handleSendMessage(event);
+            }
+        });
+        
+        document.getElementById('reservations-page').addEventListener('change', (e) => {
+            if (e.target.matches('.reservation-checkbox') || e.target.matches('#select-all-reservations')) {
+                if (e.target.id === 'select-all-reservations') {
+                    document.querySelectorAll('.reservation-checkbox').forEach(cb => cb.checked = e.target.checked);
+                }
+                updateExecuteSelectedButtonState();
+            }
+        });
+
+        document.getElementById('execute-selected-reservations-btn').addEventListener('click', () => {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
+            const selectedIds = Array.from(document.querySelectorAll('.reservation-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length > 0 && confirm(`${selectedIds.length}개의 예약을 실행하시겠습니까?`)) {
+                selectedIds.forEach(id => executeReservation(id));
+            }
+        });
+        
+        document.getElementById('cancel-selected-reservations-btn').addEventListener('click', async () => {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
+            const selectedIds = Array.from(document.querySelectorAll('.reservation-checkbox:checked')).map(cb => cb.dataset.id);
+            
+            if (selectedIds.length === 0) return;
+
+            if (confirm(`${selectedIds.length}개의 예약을 취소하시겠습니까?`)) {
+                const operatorName = prompt("예약을 취소하려는 작업자 이름을 입력해주세요:", "");
+                
+                if (operatorName === null || operatorName.trim() === "") {
+                    showCustomAlert("작업자 이름이 입력되지 않아 취소가 중단되었습니다.", "info");
+                    return;
+                }
+
+                // 모든 취소 작업을 Promise 배열로 만듭니다.
+                const cancellationPromises = selectedIds.map(id => cancelReservation(id, operatorName));
+                
+                // 모든 취소 작업이 완료될 때까지 기다립니다.
+                await Promise.all(cancellationPromises);
+                
+                // 모든 작업이 끝난 후, 데이터를 한 번만 새로고침하고 완료 메시지를 표시합니다.
+                await loadAllDataFromSupabase();
+                showCustomAlert(`${selectedIds.length}개의 예약이 성공적으로 취소되었습니다.`, 'success');
+            }
+        });
+
+
+        // --- UI 제어 함수 ---
+        function showLoginSection() {
+            loginSection.style.display = 'flex';
+            mainContent.style.display = 'none';
+        }
+
+        function showMainContent() {
+            // 함수가 호출되기 전, 메인 콘텐츠가 이미 화면에 보이는 상태인지 확인합니다.
+            const isAlreadyVisible = mainContent.style.display === 'block';
+
+            loginSection.style.display = 'none';
+            mainContent.style.display = 'block';
+            if (state.loggedInUser) {
+                // 1. 기존 내용을 비웁니다.
+                userInfoDisplay.innerHTML = ''; 
+
+                // 2. 이메일을 표시할 첫 번째 div 요소를 만듭니다.
+                const emailDiv = document.createElement('div');
+                emailDiv.textContent = `사용자: ${state.loggedInUser.email}`;
+
+                // 3. 권한을 표시할 두 번째 div 요소를 만듭니다.
+                const roleDiv = document.createElement('div');
+                roleDiv.textContent = `권한: ${state.loggedInUser.role}`;
+
+                // 4. 만들어진 두 개의 div를 userInfoDisplay에 추가합니다.
+                userInfoDisplay.appendChild(emailDiv);
+                userInfoDisplay.appendChild(roleDiv);
+            }
+            updateAdminUI();
+
+            // <<< 핵심 수정사항!
+            // 메인 콘텐츠가 이미 보이고 있었다면, 페이지를 강제로 이동시키지 않습니다.
+            // 처음 로그인해서 들어올 때만 '현황 및 관리' 페이지를 기본으로 보여줍니다.
+            if (!isAlreadyVisible) {
+                navigateTo('status');
+            }
+        }
+
+
+        function updateAdminUI() {
+            const role = state.loggedInUser?.role;
+            // admin 또는 manager 역할을 가진 사용자인지 확인
+            const isManager = role === 'admin' || role?.endsWith('_manager');
+            
+            document.querySelectorAll('.admin-only').forEach(el => {
+                // 'page' 클래스를 가진 요소는 페이지 전체를 의미
+                if (el.classList.contains('page')) {
+                    // 사용자 관리 페이지는 admin만 접근 가능하도록 특별 처리
+                    if(el.id === 'user-admin-page') {
+                        // nav-link 클릭 시 페이지를 보여줄지 결정하므로 여기선 처리 불필요
+                    }
+                } else {
+                    // 나머지 관리자 전용 버튼/요소들 처리
+                    el.style.display = isManager ? (el.tagName === 'A' ? 'flex' : 'inline-block') : 'none';
+                }
+            });
+
+            // admin만 볼 수 있는 메뉴(사용자 관리)는 따로 처리
+            const userAdminMenu = document.querySelector('a[href="#user-admin"]');
+            if(userAdminMenu) {
+                userAdminMenu.style.display = role === 'admin' ? 'flex' : 'none';
+            }
+        }
+
+
+        function showCustomAlert(message, type = 'info') {
+            const colors = { info: 'bg-blue-500', error: 'bg-red-500', success: 'bg-green-500' };
+            showModal(`
+                <h3 class="text-lg font-bold mb-4">${type === 'error' ? '오류' : type === 'success' ? '성공' : '알림'}</h3>
+                <p>${message}</p>
+                <div class="flex justify-end mt-4">
+                    <button type="button" class="cancel-modal-btn px-4 py-2 text-white ${colors[type]} rounded">확인</button>
+                </div>
+            `);
+        }
+
+        function navigateTo(pageId, forceRender = false) {
+            if (!forceRender && document.getElementById(`${pageId}-page`)?.classList.contains('active')) {
+                return; 
+            }
+            pages.forEach(page => page.classList.remove('active'));
+            const targetPage = document.getElementById(`${pageId}-page`);
+            if (targetPage) targetPage.classList.add('active');
+
+            switch (pageId) {
+                case 'status':
+                    // <<< 핵심 수정사항 시작
+                    // 페이지를 그릴 때, state에 저장된 모든 선택 정보를 바탕으로 화면을 복원합니다.
+                    renderTankList();
+                    if (state.currentSelection.tankId) {
+                        renderTankDetails(state.currentSelection.tankId);
+                        if (state.currentSelection.boxId) {
+                            renderBoxDetails(state.currentSelection.tankId, state.currentSelection.boxId);
+                            
+                            // 이전에 선택한 Vial이 있다면, click 이벤트를 실행해 상세 정보 창을 다시 띄웁니다.
+                            if (state.currentSelection.vialPosition) {
+                                const vialEl = document.querySelector(`.vial[data-position='${state.currentSelection.vialPosition}']`);
+                                if (vialEl) {
+                                    vialEl.click();
+                                }
+                            }
+                        }
+                    } else {
+                        // 선택된 것이 아무것도 없으면 모든 상세 정보 창을 숨깁니다.
+                        document.getElementById('tank-details-section').classList.add('hidden');
+                        document.getElementById('box-details-section').classList.add('hidden');
+                        document.getElementById('vial-details-section').classList.add('hidden');
+                    }
+                    // <<< 핵심 수정사항 끝
+                    break;
+                case 'reservations': 
+                    renderReservationsTable(); 
+                    break;
+                case 'history': 
+                    renderHistoryTable(); 
+                    break;
+                case 'search':
+                    renderSearchSummary(); 
+                    const searchInput = document.getElementById('search-input');
+                    searchInput.value = state.searchQuery || '';
+                    handleSearch({ target: searchInput }); 
+                    break;
+                case 'help': 
+                    renderHelpContent(); 
+                    break;
+                case 'info': 
+                    renderAppInfo(); 
+                    break;
+                case 'user-admin': 
+                    renderUserAdminPage(); 
+                    break;
+                case 'ai-chat':
+                    // 이 페이지는 정적 UI이므로 별도의 렌더링 함수가 필요 없습니다.
+                    break;
+            }
+        }
+
+
+
+
+        function showModal(content) {
+            modalContent.innerHTML = content;
+            modalContainer.style.display = 'flex';
+            modalContainer.addEventListener('click', handleModalClick, { once: true });
+            modalContent.querySelectorAll('button.cancel-modal-btn').forEach(btn => {
+                btn.addEventListener('click', closeModal, { once: true });
+            });
+        }
+
+        function closeModal() {
+            modalContainer.style.display = 'none';
+            modalContent.innerHTML = '';
+        }
+
+        function handleModalClick(e) {
+            if (e.target === modalContainer) {
+                closeModal();
+            }
+        }
+        
+        // --- 데이터 변경 로직 (Supabase 연동) ---
+        
+        async function showAddTankModal() {
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">새 보관 장비 추가</h3>
+                <form id="add-tank-form" class="space-y-3">
+                    <input type="text" name="name" placeholder="장비 번호/이름" class="w-full p-2 border rounded" required>
+                    <input type="text" name="location" placeholder="현재 위치" class="w-full p-2 border rounded" required>
+                    <input type="number" name="rack_count" placeholder="Rack 개수" class="w-full p-2 border rounded" required>
+                    <input type="number" name="rack_levels" placeholder="Rack 당 층수" class="w-full p-2 border rounded" required>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-blue-500 rounded">추가</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+            
+            document.getElementById('add-tank-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const submitButton = form.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+                submitButton.textContent = '추가 중...';
+
+                const userRole = state.loggedInUser.role;
+                let team = '';
+                if (userRole === 'ART_manager') {
+                    team = 'ART';
+                } else if (userRole === 'RnD_manager') {
+                    team = 'RnD';
+                } else if (userRole === 'admin') {
+                    team = prompt("Tank를 할당할 팀을 입력하세요 (ART 또는 RnD):", "ART");
+                    if (team && !['ART', 'RND'].includes(team.toUpperCase())) {
+                        showCustomAlert('잘못된 팀 이름입니다. ART 또는 RnD만 가능합니다.', 'error');
+                        submitButton.disabled = false;
+                        submitButton.textContent = '추가';
+                        return;
+                    }
+                }
+
+                if (!team) {
+                    showCustomAlert('Tank를 생성할 권한이 없거나, 팀이 지정되지 않았습니다.', 'error');
+                    submitButton.disabled = false;
+                    submitButton.textContent = '추가';
+                    return;
+                }
+
+                const newTankData = {
+                    name: form.elements.name.value,
+                    location: form.elements.location.value,
+                    rack_count: parseInt(form.elements.rack_count.value),
+                    rack_levels: parseInt(form.elements.rack_levels.value),
+                    user_id: state.loggedInUser.id,
+                    team: team.toUpperCase()
+                };
+
+                try {
+                    const { data: tank, error: tankError } = await _supabase.from('tanks').insert(newTankData).select().single();
+                    if (tankError) throw new Error(`Tank 생성 실패: ${tankError.message}`);
+
+                    const totalBoxes = newTankData.rack_count * newTankData.rack_levels;
+                    if (totalBoxes > 0) {
+                        const newBoxes = [];
+                        for (let i = 0; i < totalBoxes; i++) {
+                            const rackIndex = Math.floor(i / newTankData.rack_levels) + 1;
+                            const levelIndex = (i % newTankData.rack_levels) + 1;
+                            const boxName = `R${rackIndex}-${levelIndex}`;
+                            newBoxes.push({ tank_id: tank.id, box_size_x: 10, box_size_y: 10, box_index: i, box_name: boxName });
+                        }
+                        const { error: boxError } = await _supabase.from('boxes').insert(newBoxes);
+                        if (boxError) throw new Error(`Boxes 생성 실패: ${boxError.message}`);
+                    }
+                    
+                    closeModal();
+                    await loadAllDataFromSupabase(); // <<< 실시간 업데이트 추가
+
+                } catch (error) {
+                    console.error("탱크 추가 프로세스 실패:", error);
+                    showCustomAlert(error.message, "error");
+                } finally {
+                    submitButton.disabled = false;
+                    submitButton.textContent = '추가';
+                }
+            };
+        }
+
+
+
+
+        
+        // --- 여기에 나머지 모든 함수들을 붙여넣습니다 ---
+        function getInitialHelpContent() {
+            return `
+                <div class="qa-set">
+                    <h4>Q. 현황에서 Rack/Box/Vial은 어떻게 보나요?</h4>
+                    <p>A. 왼쪽 '보관 장비 목록'에서 원하는 장비를 클릭하면 오른쪽에 해당 장비의 상세 정보와 Rack 시각화 자료가 나타납니다. Rack 시각화 자료에서 원하는 Box를 클릭하면 Box 내부의 Vial 배치도를 볼 수 있습니다.</p>
+                </div>
+                <div class="qa-set">
+                    <h4>Q. 입고/출고는 어떻게 하나요?</h4>
+                    <p>A. 현황 페이지에서 원하는 Box의 비어있는 공간을 클릭하면 '입고/입고예약'을 할 수 있는 창이 뜹니다. 이미 보관된 Vial을 클릭하면 '출고/출고예약/이동'을 할 수 있습니다.</p>
+                </div>
+            `;
+        }
+
+        function getInitialInfoContent() {
+             return `
+                <h3 class="text-2xl font-bold">세포주 관리</h3>
+                <p><strong>버전:</strong> ${APP_VERSION}</p>
+                <p><strong>업데이트 날짜:</strong> ${UPDATE_DATE}</p>
+                <hr>
+                <p><strong>제작자:</strong> 임성수</p>
+                <p><strong>문의:</strong> ssim@cellincells.com</p>
+            `;
+        }
+        
+        function renderHelpContent() {
+            document.getElementById('help-content-display').innerHTML = state.helpContent;
+        }
+
+        function renderAppInfo() {
+            document.getElementById('info-content-display').innerHTML = getInitialInfoContent();
+        }
+
+        function showHelpEditMode() {
+            document.getElementById('help-content-display').classList.add('hidden');
+            document.getElementById('edit-help-btn').classList.add('hidden');
+            document.getElementById('help-content-edit').classList.remove('hidden');
+            document.getElementById('help-textarea').value = state.helpContent;
+        }
+
+        function hideHelpEditMode() {
+            document.getElementById('help-content-display').classList.remove('hidden');
+            document.getElementById('edit-help-btn').classList.remove('hidden');
+            document.getElementById('help-content-edit').classList.add('hidden');
+        }
+
+        async function saveHelpContent() {
+            const newContent = document.getElementById('help-textarea').value;
+            try {
+                const { error } = await _supabase.from('config').update({ content: newContent }).eq('id', 'help_content');
+                if (error) throw error;
+                hideHelpEditMode();
+            } catch (error) {
+                showCustomAlert('도움말 저장에 실패했습니다.', 'error');
+            }
+        }
+        
+        function renderTankList() {
+            const tankList = document.getElementById('tank-list');
+            tankList.innerHTML = '';
+            if (state.tanks.length === 0) {
+                tankList.innerHTML = '<li class="text-gray-500">등록된 장비가 없습니다.</li>';
+                return;
+            }
+            state.tanks.forEach(tank => {
+                const totalVials = tank.boxes.reduce((acc, box) => acc + (box.vials ? box.vials.length : 0), 0);
+                const totalCapacity = tank.boxes.reduce((acc, box) => acc + (box.box_size_x * box.box_size_y), 0);
+                const usage = totalCapacity > 0 ? (totalVials / totalCapacity * 100).toFixed(1) : 0;
+
+                const li = document.createElement('li');
+                li.className = `p-2 border rounded-md cursor-pointer hover:bg-gray-100 ${tank.id === state.currentSelection.tankId ? 'bg-blue-100' : ''}`;
+                li.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="font-semibold">${tank.name}</div>
+                            <div class="text-sm text-gray-600">${tank.location}</div>
+                        </div>
+                        <div class="admin-only space-x-2 text-gray-400">
+                            <i class="fas fa-edit hover:text-blue-500" data-tank-id="${tank.id}" data-action="edit"></i>
+                            <i class="fas fa-trash-alt hover:text-red-500" data-tank-id="${tank.id}" data-action="delete"></i>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${usage}%"></div>
+                    </div>
+                `;
+                li.addEventListener('click', (e) => {
+                     if (e.target.dataset.action === 'edit') showEditTankModal(e.target.dataset.tankId);
+                     else if (e.target.dataset.action === 'delete') handleDeleteTank(e.target.dataset.tankId);
+                     else renderTankDetails(tank.id);
+                });
+                tankList.appendChild(li);
+            });
+            updateAdminUI();
+        }
+
+        function renderTankDetails(tankId) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            if (!tank) return;
+
+            
+            // 만약 이전에 선택했던 Tank와 다른 Tank를 클릭했을 경우에만 Box와 Vial 선택을 초기화합니다.
+            if (state.currentSelection.tankId !== tankId) {
+                state.currentSelection = { tankId: tankId, boxId: null, vialPosition: null };
+            } else {
+                // 같은 Tank라면, 현재 선택 상태를 그대로 유지합니다.
+                state.currentSelection.tankId = tankId;
+            }
+            // <<< 핵심 수정사항 끝
+
+            renderTankList(); // Re-render to show selection
+
+            document.getElementById('tank-details-section').classList.remove('hidden');
+            document.getElementById('box-details-section').classList.add('hidden');
+            document.getElementById('vial-details-section').classList.add('hidden');
+
+            document.getElementById('tank-details-title').textContent = `${tank.name} 상세 정보`;
+            const totalVials = tank.boxes.reduce((acc, box) => acc + (box.vials ? box.vials.length : 0), 0);
+            const totalCapacity = tank.boxes.reduce((acc, box) => acc + (box.box_size_x * box.box_size_y), 0);
+            document.getElementById('tank-info').innerHTML = `
+                <p><strong>위치:</strong> ${tank.location}</p>
+                <p><strong>규격:</strong> ${tank.rack_count} Racks, ${tank.rack_levels} Levels/Rack</p>
+                <p><strong>보관 현황:</strong> ${totalVials} / ${totalCapacity} Vials (빈 공간: ${totalCapacity - totalVials}개)</p>
+            `;
+
+            const tankVisual = document.getElementById('tank-visual');
+            tankVisual.innerHTML = '<h4 class="font-semibold mb-2">Rack 현황 (클릭하여 Box 확인)</h4>';
+            const visualContainer = document.createElement('div');
+            visualContainer.className = 'box-visual max-w-[600px]';
+            visualContainer.style.gridTemplateColumns = `repeat(${tank.rack_count}, 1fr)`;
+
+            for (let i = 0; i < tank.rack_count; i++) {
+                const rackEl = document.createElement('div');
+                rackEl.className = 'rack-visual';
+                rackEl.id = `rack-visual-${i}`;
+                rackEl.innerHTML = `<div class="rack-label">Rack ${i + 1}</div>`;
+                for (let j = 0; j < tank.rack_levels; j++) {
+                    const box_index = i * tank.rack_levels + j;
+                    const box = tank.boxes.find(b => b.box_index === box_index);
+                    const boxSlot = document.createElement('div');
+                    boxSlot.className = 'box-slot';
+                    if(box) boxSlot.id = `box-slot-${box.id}`;
+
+                    // ▼▼▼▼▼ Box progress bar ▼▼▼▼▼
+                    let usage = 0;
+                    let usageText = '0%';
+                    let vialCount = 0;
+                    let capacity = 0;
+
+                    if (box && box.vials && box.box_size_x > 0 && box.box_size_y > 0) {
+                        vialCount = box.vials.length;
+                        capacity = box.box_size_x * box.box_size_y;
+                        usage = (vialCount / capacity) * 100;
+                        usageText = `${Math.round(usage)}%`;
+                    }
+
+                    // 기존의 occupied 클래스 대신, 보관율에 따라 너비가 변하는 fill div를 추가합니다.
+                    boxSlot.innerHTML = `
+                        <div class="fill" style="width: ${usage}%;"></div>
+                        <span class="label">${i + 1}-${j + 1}</span>
+                    `;
+                    // 마우스를 올리면 상세 정보를 보여주는 툴팁을 추가합니다.
+                    boxSlot.title = `Box ${i + 1}-${j + 1}: ${vialCount} / ${capacity} (${usageText})`;
+                    // ▲▲▲▲▲ Box progress bar ▲▲▲▲▲
+                    boxSlot.addEventListener('click', () => {
+                        if (!box) {
+                            showCustomAlert("이 위치에 해당하는 Box 데이터가 없습니다.", "error");
+                            return;
+                        }
+                        document.querySelectorAll('.rack-visual.selected').forEach(el => el.classList.remove('selected'));
+                        rackEl.classList.add('selected');
+                        renderBoxDetails(tank.id, box.id);
+                    });
+                    rackEl.appendChild(boxSlot);
+                }
+                visualContainer.appendChild(rackEl);
+            }
+            tankVisual.appendChild(visualContainer);
+        }
+
+        
+        // renderBoxDetails 함수 외부에서 boxResizeObserver 변수 선언
+        let boxResizeObserver = null;
+
+        function renderBoxDetails(tankId, boxId) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            const box = tank?.boxes.find(b => b.id === boxId);
+            if (!box) return;
+
+            if (state.currentSelection.boxId !== boxId) {
+                state.currentSelection.boxId = boxId;
+                state.currentSelection.vialPosition = null;
+                state.multiSelectedVials = [];
+                state.lastSelectedVialPosition = null;
+            } else {
+                state.currentSelection.boxId = boxId;
+            }
+            
+            document.querySelectorAll('.box-slot.selected').forEach(el => el.classList.remove('selected'));
+            document.getElementById(`box-slot-${boxId}`)?.classList.add('selected');
+
+            document.getElementById('box-details-section').classList.remove('hidden');
+            document.getElementById('vial-details-section').classList.add('hidden');
+            
+            document.getElementById('change-box-spec-btn').onclick = () => showChangeSpecModal(tankId, boxId);
+
+            const { tankName, boxName } = getLocationString(tankId, boxId, null);
+            document.getElementById('box-details-title').textContent = `Box 상세 정보 (Tank: ${tankName}, Box: ${boxName})`;
+
+            document.getElementById('vial-grid-legend').innerHTML = `
+                <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-1" style="background-color: var(--vial-occupied-bg);"></div>보관</div>
+                <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-1 border" style="background-color: var(--vial-empty-bg);"></div>빈 공간</div>
+                <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-1" style="background-color: var(--vial-reserved-in-bg);"></div>입고예약</div>
+                <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-1" style="background-color: var(--vial-reserved-out-bg);"></div>출고예약</div>
+                <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-1" style="background-color: var(--vial-multi-selected-bg);"></div>다중선택</div>
+            `;
+
+            const gridContainer = document.getElementById('vial-grid-container');
+            // HTML 레이아웃 침범 문제를 해결하기 위해, 이전에 추가했던 overflow-x-auto 클래스를 제거해야 합니다.
+            gridContainer.classList.remove('overflow-x-auto', 'custom-scrollbar');
+            gridContainer.innerHTML = '';
+
+            const vialGrid = document.createElement('div');
+            vialGrid.className = 'vial-grid max-w-[1300px] mx-auto';
+            
+            vialGrid.style.gridTemplateColumns = `repeat(${box.box_size_x}, minmax(0, 1fr))`;
+
+            if (boxResizeObserver) {
+                boxResizeObserver.disconnect();
+            }
+
+            const totalPositions = box.box_size_x * box.box_size_y;
+            for (let i = 1; i <= totalPositions; i++) {
+                const vialEl = document.createElement('div');
+                vialEl.className = 'vial';
+                vialEl.dataset.position = i;
+                
+                const vialData = box.vials.find(v => v.position === i);
+                
+                if (vialData) {
+                    vialEl.innerHTML = `
+                        <div class="flex flex-col justify-center items-center h-full">
+                            <span class="vial-pos-number !relative text-[11px]">${i}</span>
+                            <div class="cell-name-display text-white truncate px-1 text-[9px] min-w-0" style="line-height: 1.1;">${vialData.cell_name}</div>
+                        </div>`;
+                } else {
+                    vialEl.innerHTML = `<span class="vial-pos-number">${i}</span>`;
+                }
+                
+                const reservationData = state.reservations.find(r => r.status === 'pending' && r.location.boxId === boxId && r.location.vialPosition === i);
+
+                if (vialData) vialEl.classList.add('occupied');
+                else vialEl.classList.add('empty');
+
+                if (reservationData) {
+                    if (reservationData.type === 'in') vialEl.classList.add('reserved-in');
+                    if (reservationData.type === 'out') vialEl.classList.add('reserved-out');
+                }
+                
+                vialEl.addEventListener('click', (e) => handleVialClick(e, tankId, boxId, i, vialData));
+                vialGrid.appendChild(vialEl);
+            }
+            gridContainer.appendChild(vialGrid);
+
+            const updateVialNameVisibility = () => {
+                const widthThreshold = 80; 
+                const vials = gridContainer.querySelectorAll('.vial');
+                vials.forEach(vial => {
+                    const nameDisplay = vial.querySelector('.cell-name-display');
+                    if (nameDisplay) {
+                        if (vial.offsetWidth < widthThreshold) {
+                            nameDisplay.classList.add('hidden');
+                        } else {
+                            nameDisplay.classList.remove('hidden');
+                        }
+                    }
+                });
+            };
+
+            boxResizeObserver = new ResizeObserver(updateVialNameVisibility);
+            boxResizeObserver.observe(gridContainer);
+            
+            updateVialNameVisibility();
+
+            updateAdminUI();
+        }
+
+
+
+        function handleVialClick(event, tankId, boxId, vialPosition, vialData) {
+            state.currentSelection.vialPosition = vialPosition;
+            const { ctrlKey, shiftKey } = event;
+
+            const reservationData = state.reservations.find(r => r.status === 'pending' && r.location.boxId === boxId && r.location.vialPosition === vialPosition);
+
+            if (reservationData) {
+                renderSingleVialDetails(tankId, boxId, vialPosition, vialData, reservationData);
+                return;
+            }
+
+            if (!vialData && !ctrlKey && !shiftKey) { // 빈 공간 단독 클릭
+                state.multiSelectedVials = [];
+                state.lastSelectedVialPosition = null;
+                renderSelectionDetails(); // 선택 해제
+                renderSingleVialDetails(tankId, boxId, vialPosition, null); // 빈 공간 정보 표시
+                return;
+            }
+            
+            const tank = state.tanks.find(t => t.id === tankId);
+            const box = tank.boxes.find(b => b.id === boxId);
+            const currentVial = box.vials.find(v => v.position === vialPosition);
+            const selectionId = currentVial?.id;
+            const isSelected = state.multiSelectedVials.some(v => v.vialId === selectionId);
+
+            if (shiftKey && state.lastSelectedVialPosition && vialData) {
+                state.multiSelectedVials = [];
+                const start = Math.min(state.lastSelectedVialPosition, vialPosition);
+                const end = Math.max(state.lastSelectedVialPosition, vialPosition);
+                for (let i = start; i <= end; i++) {
+                    const vialInShift = box.vials.find(v => v.position === i);
+                    if (vialInShift) {
+                        state.multiSelectedVials.push({ tankId, boxId, vialId: vialInShift.id, vialPosition: i });
+                    }
+                }
+            } else if (ctrlKey && vialData) {
+                if (isSelected) {
+                    state.multiSelectedVials = state.multiSelectedVials.filter(v => v.vialId !== selectionId);
+                } else {
+                    state.multiSelectedVials.push({ tankId, boxId, vialId: selectionId, vialPosition });
+                }
+                state.lastSelectedVialPosition = vialPosition;
+            } else if (vialData) {
+                state.multiSelectedVials = [{ tankId, boxId, vialId: selectionId, vialPosition }];
+                state.lastSelectedVialPosition = vialPosition;
+            } else {
+                 state.multiSelectedVials = [];
+                 state.lastSelectedVialPosition = null;
+            }
+            renderSelectionDetails();
+        }
+
+        function renderSelectionDetails() {
+            document.querySelectorAll('.vial.selected, .vial.multi-selected').forEach(v => v.classList.remove('selected', 'multi-selected'));
+            
+            state.multiSelectedVials.forEach(({ tankId, boxId, vialPosition }) => {
+                if (tankId === state.currentSelection.tankId && boxId === state.currentSelection.boxId) {
+                    const el = document.querySelector(`.vial[data-position='${vialPosition}']`);
+                    if (el) el.classList.add('multi-selected');
+                }
+            });
+
+            const selectionCount = state.multiSelectedVials.length;
+            if (selectionCount === 0) {
+                document.getElementById('vial-details-section').classList.add('hidden');
+            } else if (selectionCount === 1) {
+                const { tankId, boxId, vialPosition } = state.multiSelectedVials[0];
+                const box = state.tanks.find(t=>t.id===tankId)?.boxes.find(b=>b.id===boxId);
+                const vialData = box?.vials.find(v=>v.position===vialPosition);
+                renderSingleVialDetails(tankId, boxId, vialPosition, vialData);
+            } else {
+                renderMultiVialDetails();
+            }
+        }
+
+        function renderSingleVialDetails(tankId, boxId, vialPosition, vialData, reservationData = null) {
+            reservationData = reservationData || state.reservations.find(r => r.status === 'pending' && r.location.boxId === boxId && r.location.vialPosition === vialPosition);
+            
+            document.querySelectorAll('.vial.selected').forEach(el => el.classList.remove('selected'));
+            const currentVialEl = document.querySelector(`#box-details-section .vial[data-position='${vialPosition}']`);
+            if (currentVialEl) {
+                currentVialEl.classList.add('selected');
+            }
+
+            document.getElementById('vial-details-title').textContent = 'Vial 상세 정보';
+            const infoDisplay = document.getElementById('vial-info-display');
+            const actionsContainer = document.getElementById('vial-actions');
+            const { tankName, boxName, vialPos } = getLocationString(tankId, boxId, vialPosition);
+            const locationString = `<p class="p-2 bg-gray-100 rounded-md"><strong>위치:</strong> ${tankName}, ${boxName}, P${vialPos}</p>`;
+
+            document.querySelectorAll('.vial.selected-group').forEach(el => el.classList.remove('selected-group'));
+            
+            if (reservationData) {
+                const resType = reservationData.type === 'in' ? '입고' : '출고';
+                const vialDetails = reservationData.details.vialInfo;
+                infoDisplay.innerHTML = `${locationString}
+                    <div class="mt-2 p-2 bg-yellow-100 rounded-md">
+                        <p class="font-bold text-yellow-800">${resType} 예약됨 (예약일: ${reservationData.reservation_date})</p>
+                        <div class="mt-2 space-y-1 border-t border-yellow-300 pt-2">
+                        ${Object.entries({
+                            "세포주": vialDetails.cell_name, "Vial 번호": vialDetails.vial_id, "동결일": vialDetails.freeze_date,
+                            "농도": vialDetails.concentration, "동결 작업자": vialDetails.freeze_operator,
+                            "동결 횟수": vialDetails.freeze_count, "Origin": vialDetails.origin,
+                            "기타(공정내역)": vialDetails.process_details
+                        }).map(([key, value]) => `<p><strong>${key}:</strong> ${value || ''}</p>`).join('')}
+                        </div>
+                    </div>`;
+                actionsContainer.innerHTML = `<button id="cancel-reservation-from-vial-btn" class="w-full px-3 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600">예약 취소</button>`;
+                document.getElementById('cancel-reservation-from-vial-btn').onclick = () => {
+                    if (confirm(`${resType} 예약을 취소하시겠습니까?`)) {
+                        cancelReservation(reservationData.id);
+                    }
+                };
+            } else if (vialData) {
+                const box = state.tanks.find(t=>t.id===tankId).boxes.find(b=>b.id===boxId);
+                const vialIdentityString = getVialIdentityString(vialData);
+                box.vials.filter(v => getVialIdentityString(v) === vialIdentityString).forEach(v => {
+                    const el = document.querySelector(`.vial[data-position='${v.position}']`);
+                    if (el) el.classList.add('selected-group');
+                });
+                infoDisplay.innerHTML = `${locationString}<div class="mt-2 space-y-1">${Object.entries({
+                    "세포주": vialData.cell_name, "Vial 번호": vialData.vial_id, "동결일": vialData.freeze_date, "입고일": vialData.stock_date,
+                    "농도": vialData.concentration, "동결 작업자": vialData.freeze_operator,
+                    "동결 횟수": vialData.freeze_count, "Origin": vialData.origin,
+                    "기타(공정내역)": vialData.process_details
+                }).map(([key, value]) => `<p><strong>${key}:</strong> ${value || ''}</p>`).join('')}</div>`;
+                actionsContainer.innerHTML = `<button id="stock-out-action-btn" class="w-full px-3 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600">출고 / 출고예약</button>
+                                              <button id="move-action-btn" class="w-full px-3 py-2 text-sm text-white bg-yellow-500 rounded-md hover:bg-yellow-600">이동</button>`;
+                document.getElementById('stock-out-action-btn').onclick = () => showStockOutModal();
+                document.getElementById('move-action-btn').onclick = () => showMoveModal(state.multiSelectedVials);
+            } else {
+                infoDisplay.innerHTML = `${locationString}<p class="mt-2 text-gray-500">빈 공간입니다.</p>`;
+                actionsContainer.innerHTML = `<button id="stock-in-action-btn" class="w-full px-3 py-2 text-sm text-white bg-green-500 rounded-md hover:bg-green-600">입고 / 입고예약</button>`;
+                document.getElementById('stock-in-action-btn').onclick = () => showStockInModal(tankId, boxId, vialPosition);
+            }
+            document.getElementById('vial-details-section').classList.remove('hidden');
+        }
+        
+        function renderMultiVialDetails() {
+            document.querySelectorAll('.vial.selected').forEach(el => el.classList.remove('selected'));
+            document.getElementById('vial-details-title').textContent = `다중 선택된 Vial (${state.multiSelectedVials.length}개)`;
+            const infoDisplay = document.getElementById('vial-info-display');
+            const actionsContainer = document.getElementById('vial-actions');
+            
+            let listHTML = '<ul class="space-y-2">';
+            state.multiSelectedVials.forEach(({ tankId, boxId, vialPosition }) => {
+                const vial = state.tanks.find(t=>t.id===tankId)?.boxes.find(b=>b.id===boxId)?.vials.find(v=>v.position===vialPosition);
+                if (!vial) return;
+                const { tankName, boxName, vialPos } = getLocationString(tankId, boxId, vialPosition);
+                listHTML += `<li class="p-1 border-b text-xs"><strong>${vial.cell_name} (${vial.vial_id})</strong><br>${tankName}, ${boxName}, P${vialPos}</li>`;
+            });
+            listHTML += '</ul>';
+            infoDisplay.innerHTML = listHTML;
+
+            actionsContainer.innerHTML = `<button id="bulk-stock-out-btn" class="w-full px-3 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600">일괄 출고 / 예약</button>
+                                          <button id="bulk-move-btn" class="w-full px-3 py-2 text-sm text-white bg-yellow-500 rounded-md hover:bg-yellow-600">일괄 이동</button>`;
+            
+            document.getElementById('bulk-stock-out-btn').onclick = () => showStockOutModal();
+            document.getElementById('bulk-move-btn').onclick = () => showMoveModal(state.multiSelectedVials);
+            document.getElementById('vial-details-section').classList.remove('hidden');
+        }
+        
+        function getVialIdentityString(vial) {
+            return JSON.stringify({
+                c: vial.cell_name, f: vial.freeze_date, fo: vial.freeze_operator,
+                fc: vial.freeze_count, o: vial.origin, cc: vial.concentration
+            });
+        }
+        
+        function showStockInModal(tankId, boxId, startPosition) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+            const today = new Date().toISOString().split('T')[0];
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">입고 / 입고예약</h3>
+                <form id="stock-in-form" class="space-y-4">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 border-b pb-1 mb-2">Vial 정보</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input type="text" name="cell_name" placeholder="세포주 명" class="w-full p-2 border rounded" required>
+                            <input type="text" name="vial_id" placeholder="Vial 시작 번호" class="w-full p-2 border rounded" required>
+                            <input type="number" name="quantity" placeholder="Vial 개수" class="w-full p-2 border rounded" min="1" value="" required>
+                            <div><label class="text-xs text-gray-500">동결일</label><input type="date" name="freeze_date" value="${today}" class="w-full p-2 border rounded" required></div>
+                            <input type="text" name="concentration" placeholder="세포 농도" class="w-full p-2 border rounded">
+                            <input type="text" name="freeze_operator" placeholder="동결 작업자" class="w-full p-2 border rounded" required>
+                            <input type="text" name="freeze_count" placeholder="동결 횟수 (예: 1회 동결함)" class="w-full p-2 border rounded">
+                            <input type="text" name="origin" placeholder="Origin 세포주 명" class="w-full p-2 border rounded">
+                            <textarea name="process_details" placeholder="기타 (공정 내역: 어떻게 제조된 Vial인지 설명)" class="w-full p-2 border rounded sm:col-span-2"></textarea>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 border-b pb-1 mb-2">작업 정보</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label id="stock-in-date-label" class="text-xs text-gray-500">입고일</label><input type="date" name="stock_date" value="${today}" class="w-full p-2 border rounded" required></div>
+                            <input type="text" name="inOutOperator" placeholder="입/출고 작업자 이름" class="w-full p-2 border rounded" value="" required>
+                            <input type="text" name="proposalId" placeholder="기안번호" class="w-full p-2 border rounded">
+                            <textarea name="workDetails" placeholder="기타 (작업 내역)" class="w-full p-2 border rounded sm:col-span-2"></textarea>
+                        </div>
+                    </div>
+                    <div class="pt-2">
+                        <div class="flex items-center"><input type="checkbox" id="is-reservation-in" name="isReservation" class="mr-2 h-4 w-4"><label for="is-reservation-in">예약하기</label></div>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-blue-500 rounded">확인</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+            
+            const isReservationCheckbox = document.getElementById('is-reservation-in');
+            const stockDateLabel = document.getElementById('stock-in-date-label');
+
+            isReservationCheckbox.onchange = () => {
+                stockDateLabel.textContent = isReservationCheckbox.checked ? '예약일' : '입고일';
+            };
+
+            document.getElementById('stock-in-form').addEventListener('submit', (e) => handleStockInSubmit(e, tankId, boxId, startPosition));
+        }
+
+        function checkObserverPermission() {
+            // state.loggedInUser.role이 'observer'로 끝나는 모든 경우를 확인합니다.
+            if (state.loggedInUser.role && (state.loggedInUser.role.endsWith('observer') || state.loggedInUser.role === 'No role')) {
+                showCustomAlert('권한이 없습니다.', 'error');
+                return false; // 권한 없음
+            }
+            return true; // 권한 있음
+        }
+
+        async function handleStockInSubmit(e, tankId, boxId, startPosition) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const quantity = parseInt(data.quantity, 10) || 1;
+            const tank = state.tanks.find(t => t.id === tankId);
+            const box = tank.boxes.find(b => b.id === boxId);
+            const isReservation = form.elements.isReservation.checked;
+            const workDate = data.stock_date; // 입고일/예약일 값을 workDate로 통일
+
+            let occupiedPositions = [];
+            for (let i = 0; i < quantity; i++) {
+                const currentPos = startPosition + i;
+                if (currentPos < 1 || currentPos > (box.box_size_x * box.box_size_y) || box.vials.some(v => v.position === currentPos) || state.reservations.some(r => r.status === 'pending' && r.location.boxId === boxId && r.location.vialPosition === currentPos)) {
+                    occupiedPositions.push(currentPos);
+                }
+            }
+            if (occupiedPositions.length > 0) {
+                showCustomAlert(`오류: 다음 위치가 잘못되었거나 이미 Vial이 보관 또는 예약 중입니다: ${occupiedPositions.join(', ')}`, 'error'); return;
+            }
+            
+            const vialIdInput = data.vial_id;
+            const vialIdMatch = vialIdInput.match(/^(.*?)(\d+)$/);
+            let vialPrefix = '', vialNum = NaN, numPartLength = 1;
+
+            if (vialIdMatch) {
+                vialPrefix = vialIdMatch[1];
+                vialNum = parseInt(vialIdMatch[2], 10);
+                numPartLength = vialIdMatch[2].length;
+            } else {
+                vialPrefix = vialIdInput;
+                vialNum = 1;
+            }
+
+            try {
+                const recordsToInsert = [];
+                for (let i = 0; i < quantity; i++) {
+                    const currentPos = startPosition + i;
+                    const { tankName, boxName } = getLocationString(tankId, boxId, currentPos);
+                    const currentVialNum = vialNum + i;
+                    const currentVialId = `${vialPrefix}${String(currentVialNum).padStart(numPartLength, '0')}`;
+                    
+                    const vialInfo = {
+                        cell_name: data.cell_name, vial_id: currentVialId, freeze_date: data.freeze_date,
+                        concentration: data.concentration, freeze_operator: data.freeze_operator,
+                        freeze_count: data.freeze_count, origin: data.origin, process_details: data.process_details,
+                        position: currentPos,
+                        box_id: boxId,
+                        stock_date: isReservation ? null : workDate 
+                    };
+
+                    const workInfo = {
+                        workDate: isReservation ? new Date().toISOString().split('T')[0] : workDate,
+                        action: isReservation ? '입고예약' : '입고',
+                        inOutOperator: data.inOutOperator, processOperator: 'N/A',
+                        tankLocation: tankName, boxLocation: boxName, vialLocation: String(currentPos),
+                        proposalId: data.proposalId, workDetails: data.workDetails,
+                        userEmail: state.loggedInUser.email
+                    };
+                    recordsToInsert.push({ vialInfo, workInfo });
+                }
+
+                if (isReservation) {
+                    const reservationPayloads = recordsToInsert.map(r => ({
+                        type: 'in', 
+                        cell_name: r.vialInfo.cell_name,
+                        location: { tankId, boxId, vialPosition: r.vialInfo.position },
+                        details: { workInfo: r.workInfo, vialInfo: r.vialInfo },
+                        reservation_date: workDate, 
+                        status: 'pending',
+                        team: tank.team
+                    }));
+                    const { error } = await _supabase.from('reservations').insert(reservationPayloads);
+                    if (error) throw error;
+                } else {
+                    const vialPayloads = recordsToInsert.map(r => r.vialInfo);
+                    const { error } = await _supabase.from('vials').insert(vialPayloads);
+                    if (error) throw error;
+                }
+
+                const historyPayloads = recordsToInsert.map(r => ({
+                    work_info: r.workInfo, 
+                    vial_info: r.vialInfo,
+                    team: tank.team
+                }));
+                const { error: historyError } = await _supabase.from('history').insert(historyPayloads);
+                if (historyError) throw historyError;
+
+                closeModal();
+                await loadAllDataFromSupabase();
+                showCustomAlert(`${quantity}개의 Vial이 성공적으로 ${isReservation ? '예약' : '입고'}되었습니다.`, 'success');
+            } catch (error) {
+                console.error("입고 처리 실패:", error);
+                showCustomAlert(`입고 처리 중 오류가 발생했습니다: ${error.message}`, "error");
+            }
+        }
+
+
+
+        
+        function showStockOutModal() {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+            const targets = state.multiSelectedVials;
+            if (!targets || targets.length === 0) return;
+
+            const isBulk = targets.length > 1;
+            const targetVials = targets.map(({tankId, boxId, vialPosition}) => 
+                state.tanks.find(t=>t.id===tankId)?.boxes.find(b=>b.id===boxId)?.vials.find(v=>v.position===vialPosition)
+            );
+            const today = new Date().toISOString().split('T')[0];
+            
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">출고 / 출고예약 (${targets.length}개)</h3>
+                <p class="text-sm mb-4">${isBulk ? '선택된 모든 Vial에 적용됩니다.' : `대상: ${targetVials[0].cell_name} (${targetVials[0].vial_id})`}</p>
+                <form id="stock-out-form" class="space-y-4 mt-4">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 border-b pb-1 mb-2">작업 정보</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label id="stock-out-date-label" class="text-xs text-gray-500">출고일</label><input type="date" name="work_date" value="${today}" class="w-full p-2 border rounded" required></div>
+                            <input type="text" name="inOutOperator" placeholder="입/출고 작업자 이름" class="w-full p-2 border rounded" value="" required>
+                            <input type="text" name="processOperator" placeholder="공정 작업자" class="w-full p-2 border rounded">
+                            <input type="text" name="proposalId" placeholder="기안번호" class="w-full p-2 border rounded">
+                            <textarea name="workDetails" placeholder="기타 (작업 내역)" class="w-full p-2 border rounded sm:col-span-2"></textarea>
+                        </div>
+                    </div>
+                    <div class="pt-2">
+                        <div class="flex items-center"><input type="checkbox" id="is-reservation-out" name="isReservation" class="mr-2 h-4 w-4"><label for="is-reservation-out">예약하기</label></div>
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-red-500 rounded">확인</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+            
+            const form = document.getElementById('stock-out-form');
+            const isReservationCheckbox = document.getElementById('is-reservation-out');
+            const stockOutDateLabel = document.getElementById('stock-out-date-label');
+            
+            isReservationCheckbox.onchange = () => {
+                stockOutDateLabel.textContent = isReservationCheckbox.checked ? '예약일' : '출고일';
+            };
+
+            form.addEventListener('submit', (e) => handleStockOutSubmit(e, targets, targetVials));
+        }
+
+
+
+        async function handleStockOutSubmit(e, targets, targetVials) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const isReservation = form.elements.isReservation.checked;
+            const workDate = data.work_date; // 출고일/예약일 값을 workDate로 통일
+
+            try {
+                const recordsToProcess = [];
+                for (let i = 0; i < targets.length; i++) {
+                    const { tankId, boxId, vialPosition, vialId } = targets[i];
+                    const vial = targetVials[i];
+                    const tank = state.tanks.find(t => t.id === tankId);
+                    const { tankName, boxName, vialPos } = getLocationString(tankId, boxId, vialPosition);
+                    
+                    const workInfo = {
+                        workDate: isReservation ? new Date().toISOString().split('T')[0] : workDate,
+                        action: isReservation ? '출고예약' : '출고',
+                        inOutOperator: data.inOutOperator, processOperator: data.processOperator || 'N/A',
+                        tankLocation: tankName, boxLocation: boxName, vialLocation: vialPos,
+                        proposalId: data.proposalId, workDetails: data.workDetails,
+                        userEmail: state.loggedInUser.email
+                    };
+                    recordsToProcess.push({ vial, vialId, tankId, boxId, workInfo, team: tank.team });
+                }
+                
+                if (isReservation) {
+                    const reservationPayloads = recordsToProcess.map(r => ({
+                        type: 'out', 
+                        cell_name: r.vial.cell_name,
+                        location: { tankId: r.tankId, boxId: r.boxId, vialPosition: r.vial.position, vialId: r.vial.id },
+                        details: { workInfo: r.workInfo, vialInfo: r.vial },
+                        reservation_date: workDate, 
+                        status: 'pending',
+                        team: r.team
+                    }));
+                    const { error } = await _supabase.from('reservations').insert(reservationPayloads);
+                    if (error) throw error;
+                } else {
+                    const vialIdsToDelete = recordsToProcess.map(r => r.vialId);
+                    const { error } = await _supabase.from('vials').delete().in('id', vialIdsToDelete);
+                    if (error) throw error;
+                }
+
+                const historyPayloads = recordsToProcess.map(r => ({
+                    work_info: r.workInfo, 
+                    vial_info: r.vial,
+                    team: r.team
+                }));
+                const { error: historyError } = await _supabase.from('history').insert(historyPayloads);
+                if (historyError) throw historyError;
+
+                closeModal();
+                await loadAllDataFromSupabase();
+                showCustomAlert(`${targets.length}개의 Vial이 성공적으로 ${isReservation ? '예약' : '출고'}되었습니다.`, 'success');
+            } catch (error) {
+                console.error("출고 처리 실패:", error);
+                showCustomAlert(`출고 처리 중 오류가 발생했습니다: ${error.message}`, "error");
+            }
+        }
+
+
+
+
+        async function showMoveModal(targets) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+            if (!targets || targets.length === 0) return;
+
+            const tankOptions = state.tanks.map(tank => `<option value="${tank.id}">${tank.name}</option>`).join('');
+
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">Vial 이동 (${targets.length}개)</h3>
+                <p class="text-sm mb-4">이동할 목적지를 선택하세요.</p>
+                <form id="move-vial-form" class="space-y-4">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 border-b pb-1 mb-2">목적지 정보</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label for="dest-tank" class="text-sm font-medium">Tank</label>
+                                <select id="dest-tank" name="destTankId" class="w-full p-2 border rounded mt-1" required>
+                                    <option value="">-- 탱크 선택 --</option>
+                                    ${tankOptions}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="dest-box" class="text-sm font-medium">Box</label>
+                                <select id="dest-box" name="destBoxId" class="w-full p-2 border rounded mt-1" required disabled>
+                                    <option value="">-- 박스 선택 --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="dest-pos" class="text-sm font-medium">시작 위치</label>
+                                <input type="number" id="dest-pos" name="destPosition" class="w-full p-2 border rounded mt-1" min="1" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 border-b pb-1 mb-2">작업 정보</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input type="text" name="inOutOperator" placeholder="작업자 이름" class="w-full p-2 border rounded" value="" required>
+                            <input type="text" name="proposalId" placeholder="기안번호" class="w-full p-2 border rounded">
+                            <textarea name="workDetails" placeholder="기타 (작업 내역)" class="w-full p-2 border rounded sm:col-span-2"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-yellow-500 rounded">이동 실행</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+
+            const destTankSelect = document.getElementById('dest-tank');
+            const destBoxSelect = document.getElementById('dest-box');
+
+            destTankSelect.addEventListener('change', (e) => {
+                const selectedTankId = e.target.value;
+                destBoxSelect.innerHTML = '<option value="">-- 박스 선택 --</option>';
+                destBoxSelect.disabled = true;
+
+                if (selectedTankId) {
+                    const tank = state.tanks.find(t => t.id === selectedTankId);
+                    if (tank) {
+                        // Box 목록을 화면에 표시하기 전에 원하는 순서대로 정렬합니다.
+                        const sortedBoxes = tank.boxes.sort((a, b) => {
+                            const rackA = Math.floor(a.box_index / tank.rack_levels);
+                            const levelA = a.box_index % tank.rack_levels;
+                            
+                            const rackB = Math.floor(b.box_index / tank.rack_levels);
+                            const levelB = b.box_index % tank.rack_levels;
+
+                            // 1. Rack 번호를 기준으로 오름차순 정렬합니다. (R1, R2, ...)
+                            if (rackA !== rackB) {
+                                return rackA - rackB;
+                            }
+                            // 2. Rack 번호가 같으면, Level 번호를 기준으로 내림차순 정렬합니다. (-10, -9, ...)
+                            return levelB - levelA;
+                        });
+                        
+                        // 정렬된 배열(sortedBoxes)을 사용해 옵션을 생성합니다.
+                        const boxOptions = sortedBoxes.map((box) => {
+                            const { boxName } = getLocationString(tank.id, box.id, null);
+                            return `<option value="${box.id}">${boxName}</option>`;
+                        }).join('');
+                        destBoxSelect.innerHTML += boxOptions;
+                        destBoxSelect.disabled = false;
+                    }
+                }
+            });
+
+            document.getElementById('move-vial-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleMoveSubmit(e, targets);
+            });
+        }
+        
+        async function handleMoveSubmit(e, targets) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            const destTankId = data.destTankId;
+            const destBoxId = data.destBoxId;
+            const startPosition = parseInt(data.destPosition, 10);
+            
+            const destTank = state.tanks.find(t => t.id === destTankId);
+            const destBox = destTank.boxes.find(b => b.id === destBoxId);
+
+            // 1. 목적지 유효성 검사
+            for (let i = 0; i < targets.length; i++) {
+                const newPosition = startPosition + i;
+                if (newPosition < 1 || newPosition > (destBox.box_size_x * destBox.box_size_y)) {
+                    showCustomAlert(`오류: 목적지 위치(${newPosition})가 Box 범위를 벗어납니다.`, 'error');
+                    return;
+                }
+                // 자기 자신을 제외하고 목적지가 비어있는지 확인
+                const isTargetOneOfMovedVials = targets.some(target => target.boxId === destBoxId && target.vialPosition === newPosition);
+                if (isTargetOneOfMovedVials) continue;
+
+                const isOccupied = destBox.vials.some(v => v.position === newPosition);
+                const isReserved = state.reservations.some(r => r.status === 'pending' && r.location.boxId === destBoxId && r.location.vialPosition === newPosition);
+                if (isOccupied || isReserved) {
+                    showCustomAlert(`오류: 목적지 위치(${newPosition})에 이미 다른 Vial이 있거나 예약되어 있습니다.`, 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const vialUpdates = [];
+                const historyLogs = [];
+
+                for (let i = 0; i < targets.length; i++) {
+                    const target = targets[i];
+                    const vial = state.tanks.find(t => t.id === target.tankId)?.boxes.find(b => b.id === target.boxId)?.vials.find(v => v.position === target.vialPosition);
+                    if (!vial) continue;
+
+                    const { tankName: originTank, boxName: originBox, vialPos: originPos } = getLocationString(target.tankId, target.boxId, target.vialPosition);
+                    const { tankName: destTankName, boxName: destBoxName, vialPos: destPos } = getLocationString(destTankId, destBoxId, startPosition + i);
+                    
+                    // 1. Vial 정보 업데이트 준비
+                    vialUpdates.push({
+                        id: vial.id,
+                        box_id: destBoxId,
+                        position: startPosition + i
+                    });
+
+                    // 2. 히스토리 기록 준비
+                    const workInfo = {
+                        workDate: new Date().toISOString().split('T')[0],
+                        action: '이동',
+                        inOutOperator: data.inOutOperator,
+                        processOperator: 'N/A',
+                        tankLocation: `${originTank} -> ${destTankName}`,
+                        boxLocation: `${originBox} -> ${destBoxName}`,
+                        vialLocation: `${originPos} -> ${destPos}`,
+                        proposalId: data.proposalId,
+                        workDetails: data.workDetails || `[${vial.cell_name}] Vial 이동`,
+                        userEmail: state.loggedInUser.email
+                    };
+
+                    historyLogs.push({
+                        work_info: workInfo,
+                        vial_info: vial,
+                        team: destTank.team // 목적지 Tank의 team 정보로 기록
+                    });
+                }
+
+                // DB 작업 실행
+                const { error: updateError } = await _supabase.from('vials').upsert(vialUpdates);
+                if (updateError) throw updateError;
+
+                const { error: historyError } = await _supabase.from('history').insert(historyLogs);
+                if (historyError) throw historyError;
+                
+                closeModal();
+                await loadAllDataFromSupabase(); // <<< 실시간 업데이트 추가
+                showCustomAlert(`${targets.length}개 Vial의 이동이 완료되었습니다.`, 'success');
+
+            } catch (error) {
+                console.error("Vial 이동 실패:", error);
+                showCustomAlert(`Vial 이동 중 오류가 발생했습니다: ${error.message}`, "error");
+            }
+        }
+
+
+
+        function renderReservationsTable() {
+            const tableBody = document.getElementById('reservations-table-body');
+            tableBody.innerHTML = '';
+            const today = new Date().toISOString().split('T')[0];
+
+            state.reservations.filter(r => r.status === 'pending').forEach(res => {
+                const isOverdue = res.reservation_date < today;
+                const { tankName, boxName, vialPos } = getLocationString(res.location.tankId, res.location.boxId, res.location.vialPosition);
+                const locationStr = `${tankName}, ${boxName}, P${vialPos}`;
+                const row = document.createElement('tr');
+                row.className = isOverdue ? 'bg-red-100' : '';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap"><input type="checkbox" class="reservation-checkbox" data-id="${res.id}"></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${res.type === 'in' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${res.type === 'in' ? '입고' : '출고'}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${res.cell_name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${locationStr}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${res.details.workInfo.proposalId || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${res.reservation_date} ${isOverdue ? '<span class="text-red-600 font-bold">(기한 지남)</span>' : ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button class="text-indigo-600 hover:text-indigo-900 execute-reservation-btn" data-id="${res.id}">실행</button>
+                        <button class="text-red-600 hover:text-red-900 ml-4 cancel-reservation-btn" data-id="${res.id}">취소</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            document.querySelectorAll('.execute-reservation-btn').forEach(btn => {
+                btn.onclick = () => {
+                    if(confirm('이 예약을 실행하시겠습니까?')) {
+                        executeReservation(btn.dataset.id);
+                    }
+                }
+            });
+            document.querySelectorAll('.cancel-reservation-btn').forEach(btn => {
+                btn.onclick = () => {
+                    if(confirm('이 예약을 취소하시겠습니까?')) {
+                        cancelReservation(btn.dataset.id);
+                    }
+                }
+            });
+            updateExecuteSelectedButtonState();
+        }
+
+        async function executeReservation(reservationId) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
+            const res = state.reservations.find(r => String(r.id) === reservationId);
+            if (!res) {
+                console.error(`Reservation with ID ${reservationId} not found in state.`);
+                showCustomAlert('해당 예약을 찾을 수 없습니다. 페이지를 새로고침 후 다시 시도해주세요.', 'error');
+                return;
+            }
+
+            const { tankId, boxId, vialPosition, vialId } = res.location;
+            
+            // 작업일(workDate)을 예약했던 날짜(reservation_date)로 설정
+            res.details.workInfo.workDate = res.reservation_date;
+            res.details.workInfo.action = res.type === 'in' ? '입고' : '출고';
+            res.details.workInfo.userEmail = state.loggedInUser.email;
+
+            const historyLog = {
+                work_info: res.details.workInfo,
+                vial_info: res.details.vialInfo,
+                team: res.team
+            };
+
+            try {
+                if (res.type === 'in') {
+                    // 입고일(stock_date)을 예약했던 날짜(reservation_date)로 설정
+                    const newVial = { ...res.details.vialInfo, stock_date: res.reservation_date };
+                    const { error: insertError } = await _supabase.from('vials').insert(newVial);
+                    if (insertError) throw insertError;
+                    
+                    historyLog.vial_info = newVial; 
+                    await _supabase.from('history').insert(historyLog);
+
+                } else if (res.type === 'out') {
+                    const { error: deleteError } = await _supabase.from('vials').delete().eq('id', vialId);
+                    if (deleteError) throw deleteError;
+                    
+                    await _supabase.from('history').insert(historyLog);
+                }
+                
+                await _supabase.from('reservations').delete().eq('id', reservationId);
+                await loadAllDataFromSupabase();
+            } catch(error) {
+                console.error("예약 실행 실패:", error);
+                showCustomAlert(`예약 실행 중 오류가 발생했습니다: ${error.message}`, "error");
+            }
+        }
+
+
+        async function cancelReservation(reservationId, operatorName = null) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+
+            let opName = operatorName;
+
+            // operatorName이 인자로 전달되지 않았을 경우에만 이름을 묻습니다. (개별 취소 시)
+            if (opName === null) {
+                opName = prompt("예약 취소를 하려는 작업자 이름을 입력해주세요:", "");
+                if (opName === null || opName.trim() === "") {
+                    showCustomAlert("작업자 이름이 입력되지 않아 취소되었습니다.", "info");
+                    return;
+                }
+            }
+            
+            const res = state.reservations.find(r => String(r.id) === reservationId);
+            if (!res) {
+                console.error(`Could not find reservation with ID ${reservationId} to cancel.`);
+                return;
+            }
+            
+            const workInfo = {
+                workDate: new Date().toISOString().split('T')[0],
+                action: '예약취소',
+                inOutOperator: opName, // 결정된 작업자 이름을 사용합니다.
+                userEmail: state.loggedInUser.email,
+                workDetails: `'${res.reservation_date}'에 예약된 '${res.cell_name}'의 ${res.type === 'in' ? '입고' : '출고'} 예약을 취소함.`
+            };
+
+            const historyLog = {
+                work_info: workInfo,
+                vial_info: res.details.vialInfo,
+                team: res.team
+            };
+
+            try {
+                await _supabase.from('history').insert(historyLog);
+                await _supabase.from('reservations').delete().eq('id', reservationId);
+                
+                // 개별 취소일 경우에만 즉시 화면을 업데이트하고 알림을 띄웁니다.
+                if (operatorName === null) {
+                    await loadAllDataFromSupabase();
+                    showCustomAlert('예약이 취소되었습니다.', 'success');
+                }
+            } catch (error) {
+                console.error(`Failed to cancel reservation ${reservationId}:`, error);
+                // 일괄 작업 중 개별 오류가 발생해도 사용자에게 알려줍니다.
+                showCustomAlert(`예약(ID: ${reservationId}) 취소 중 오류가 발생했습니다: ${error.message}`, "error");
+            }
+        }
+
+        
+        function updateExecuteSelectedButtonState() {
+            const anyChecked = document.querySelector('.reservation-checkbox:checked');
+            document.getElementById('execute-selected-reservations-btn').disabled = !anyChecked;
+            document.getElementById('cancel-selected-reservations-btn').disabled = !anyChecked;
+        }
+
+        function renderHistoryTable() {
+			const tableBody = document.getElementById('history-table-body');
+			tableBody.innerHTML = '';
+			state.history.forEach((log, index) => {
+				const row = document.createElement('tr');
+				const work = log.work_info || {};
+				const vial = log.vial_info || {};
+				// team 정보도 함께 사용할 수 있도록 추가합니다.
+				const team = log.team || 'N/A';
+
+				row.innerHTML = `
+					<td class="px-2 py-2 text-center text-sm text-gray-500">${index + 1}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.workDate || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-900">${work.action || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.inOutOperator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.processOperator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.tankLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.boxLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.vialLocation || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${work.proposalId || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500 break-all">${work.workDetails || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-900">${vial.cell_name || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.vial_id || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_date || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.stock_date || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.concentration || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_operator || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.freeze_count || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500">${vial.origin || ''}</td>
+					<td class="px-2 py-2 text-sm text-gray-500 break-all">${vial.process_details || ''}</td>
+				`;
+				tableBody.appendChild(row);
+			});
+		}
+        
+        function exportToCsv(filename, rows) {
+            if (rows.length === 0) return;
+            const headers = Object.keys(rows[0]);
+            const csvContent = rows.map(row => 
+                headers.map(header => `"${String(row[header] || '').replace(/"/g, '""')}"`).join(',')
+            ).join('\n');
+
+            const fullCsv = `\uFEFF${headers.join(',')}\n${csvContent}`;
+            const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function handleHistoryCsvExport() {
+			// 데이터가 많을 수 있으므로 사용자에게 로딩 중임을 알립니다.
+			showModal('<p class="text-center font-semibold">전체 기록을 다운로드하는 중입니다...<br>데이터 양에 따라 시간이 걸릴 수 있습니다.</p>');
+
+			try {
+				let allHistory = [];
+				const CHUNK_SIZE = 1000; // 한 번에 1000개씩 데이터를 가져옵니다.
+				let from = 0;
+				let hasMore = true;
+
+				// allHistory에 모든 기록이 담길 때까지 반복해서 데이터를 가져옵니다.
+				while (hasMore) {
+					// ▼▼▼▼▼ 핵심 수정사항 ▼▼▼▼▼
+					// 'history' 테이블 대신 'sorted_history_details_view' 뷰에서 데이터를 가져옵니다.
+					// 뷰에 이미 정렬이 적용되어 있으므로 .order()는 필요 없습니다.
+					const { data, error } = await _supabase
+						.from('sorted_history_details_view') 
+						.select('*')
+						.range(from, from + CHUNK_SIZE - 1);
+					// ▲▲▲▲▲ 핵심 수정사항 ▲▲▲▲▲
+
+					if (error) throw error; // 오류 발생 시 중단
+
+					if (data && data.length > 0) {
+						allHistory = allHistory.concat(data);
+						from += CHUNK_SIZE;
+					}
+
+					// 가져온 데이터가 CHUNK_SIZE보다 작으면 마지막 페이지이므로 반복을 멈춥니다.
+					if (!data || data.length < CHUNK_SIZE) {
+						hasMore = false;
+					}
+				}
+
+				if (allHistory.length === 0) {
+					showCustomAlert('내보낼 기록이 없습니다.');
+					return;
+				}
+
+				// 가져온 전체 데이터를 사용해 CSV 파일을 생성합니다 (기존 로직과 동일).
+				const flattenedRows = allHistory.map((log, index) => {
+					const work = log.work_info || {};
+					const vial = log.vial_info || {};
+					// 뷰에서 가져온 team 정보를 추가합니다.
+					return {
+						'No.': index + 1, // 정렬된 순서대로 No.를 매깁니다.
+						'작업일': work.workDate, 
+						'작업': work.action, 
+						'입/출고작업자': work.inOutOperator, 
+						'공정작업자': work.processOperator,
+						'Tank위치': work.tankLocation, 
+						'Box위치': work.boxLocation, 
+						'Vial위치': work.vialLocation,
+						'기안번호': work.proposalId, 
+						'기타(작업내역)': work.workDetails,
+						'세포주': vial.cell_name, 
+						'Vial번호': vial.vial_id, 
+						'동결일': vial.freeze_date, 
+						'입고일': vial.stock_date, 
+						'농도': vial.concentration,
+						'동결작업자': vial.freeze_operator, 
+						'동결횟수': vial.freeze_count, 
+						'Origin': vial.origin, 
+						'기타(공정내역)': vial.process_details,
+						'팀': log.team // team 열 추가
+					};
+				});
+				
+				exportToCsv(`세포주관리대장_기록_전체_${new Date().toISOString().split('T')[0]}.csv`, flattenedRows);
+
+			} catch (error) {
+				console.error('Error exporting all history:', error);
+				showCustomAlert(`전체 기록을 내보내는 중 오류가 발생했습니다: ${error.message}`, 'error');
+			} finally {
+				// 작업이 성공하든 실패하든 로딩 모달 창을 닫습니다.
+				closeModal();
+			}
+		}
+
+        function handleStatusCsvExport() {
+            const allVials = [];
+            state.tanks.forEach(tank => {
+                tank.boxes.forEach((box) => {
+                    const { tankName, boxName } = getLocationString(tank.id, box.id, null);
+                    box.vials.forEach(vial => {
+                        allVials.push({
+                            'Tank': tankName, 'Box': boxName, 'Position': vial.position,
+                            '세포주': vial.cell_name, 'Vial번호': vial.vial_id, '동결일': vial.freeze_date, '입고일': vial.stock_date,
+                            '농도': vial.concentration, '동결작업자': vial.freeze_operator, '동결횟수': vial.freeze_count,
+                            'Origin': vial.origin, '기타(공정내역)': vial.process_details
+                        });
+                    });
+                });
+            });
+
+            if (allVials.length === 0) {
+                showCustomAlert('내보낼 데이터가 없습니다.'); return;
+            }
+            exportToCsv(`세포주현황_${new Date().toISOString().split('T')[0]}.csv`, allVials);
+        }
+
+		function parseCsv(text) {
+			// 줄 단위 분리 (CRLF/LF 호환)
+			const lines = text.replace(/\r/g, '').split('\n').filter(line => line.trim() !== '');
+			if (lines.length < 2) return [];
+
+			// BOM 제거
+			let headerLine = lines[0];
+			if (headerLine.charCodeAt(0) === 0xFEFF) {
+				headerLine = headerLine.slice(1);
+			}
+
+			// 헤더 추출
+			const headers = headerLine.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(h => h.trim().replace(/^"|"$/g, ''));
+			const result = [];
+
+			for (let i = 1; i < lines.length; i++) {
+				const obj = {};
+				let line = lines[i];
+
+				// 빈 칸도 유지하는 split 정규식 사용 >>>
+				const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+
+				for (let j = 0; j < headers.length; j++) {
+					let value = values[j] !== undefined ? values[j].trim() : "";
+
+					// 양 끝의 따옴표 제거
+					if (value.startsWith('"') && value.endsWith('"')) {
+						value = value.substring(1, value.length - 1);
+					}
+					// "" → " 치환
+					value = value.replace(/""/g, '"');
+
+                    // 값에 포함된 모든 종류의 엔터(줄바꿈) 문자를 삭제합니다.
+                    value = value.replace(/(\r\n|\n|\r)/g, '');
+
+					obj[headers[j]] = value;
+				}
+				result.push(obj);
+			}
+			return result;
+		}
+        
+        async function handleHistoryCsvImport(e, mode) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (mode === 'overwrite' && !confirm('정말 모든 기록을 삭제하고 이 파일의 내용으로 덮어쓰시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                e.target.value = ''; return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const rows = parseCsv(event.target.result);
+                    if (rows.length === 0) throw new Error('CSV 파일이 비어있거나 형식이 잘못되었습니다.');
+
+                    const newHistoryEntries = rows.map(row => {
+                         const workInfo = {
+                            workDate: row['작업일'], action: row['작업'], inOutOperator: row['입/출고작업자'],
+                            processOperator: row['공정작업자'], tankLocation: row['Tank위치'], boxLocation: row['Box위치'],
+                            vialLocation: row['Vial위치'], proposalId: row['기안번호'], workDetails: row['기타(작업내역)']
+                        };
+                        const vialInfo = {
+                            cell_name: row['세포주'], vial_id: row['Vial번호'], freeze_date: row['동결일'], stock_date: row['입고일'],
+                            concentration: row['농도'], freeze_operator: row['동결작업자'], freeze_count: row['동결횟수'],
+                            origin: row['Origin'], process_details: row['기타(공정내역)']
+                        };
+                        if (!workInfo.workDate || !workInfo.action || !vialInfo.cell_name) return null;
+                        return { timestamp: new Date(workInfo.workDate), work_info: workInfo, vial_info: vialInfo };
+                    }).filter(Boolean);
+
+                    if (newHistoryEntries.length === 0) throw new Error('유효한 기록을 찾을 수 없습니다.');
+                    
+                    if(mode === 'overwrite') {
+                        // 데이터베이스 함수를 호출하여 모든 데이터를 삭제합니다.
+                        const { error: rpcError } = await _supabase.rpc('delete_all_history');
+                        if (rpcError) throw new Error(`기존 기록 삭제 실패: ${rpcError.message}`);
+                    }
+                    
+                    // ▼▼▼▼▼ 10000개씩 처리 ▼▼▼▼▼
+                    const CHUNK_SIZE = 10000;
+                    for (let i = 0; i < newHistoryEntries.length; i += CHUNK_SIZE) {
+                        const chunk = newHistoryEntries.slice(i, i + CHUNK_SIZE);
+                        console.log(`Importing history chunk ${i / CHUNK_SIZE + 1}...`);
+                        const { error: insertError } = await _supabase.from('history').insert(chunk);
+                        if (insertError) throw insertError;
+                    }
+                    // ▲▲▲▲▲ 10000개씩 처리 ▲▲▲▲▲
+
+                    // 성공 메시지를 띄우기 전에 데이터를 다시 불러와 화면을 새로고침합니다.
+                    await loadAllDataFromSupabase();
+
+                    showCustomAlert(`${newHistoryEntries.length}개의 기록을 성공적으로 ${mode === 'add' ? '추가' : '가져'}왔습니다.`, 'success');
+                } catch (err) {
+                    showCustomAlert(`CSV 파일 처리 중 오류 발생: ${err.message}`, 'error');
+                } finally {
+                    e.target.value = '';
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        async function handleStatusCsvImport(e) {
+            if (!checkObserverPermission()) return; // ◀◀◀ 권한 확인
+            if (!confirm('경고: 현황 CSV를 가져오면 현재 보관된 모든 Vial 정보가 삭제되고 파일의 내용으로 대체됩니다. 계속하시겠습니까?')) {
+                e.target.value = ''; return;
+            }
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const rows = parseCsv(event.target.result);
+                    if (rows.length === 0) throw new Error('CSV 파일이 비어있거나 형식이 잘못되었습니다.');
+                    
+                    // Clear all existing vials first
+                    const { error: deleteError } = await _supabase.from('vials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    if(deleteError) throw deleteError;
+                    
+                    let importedCount = 0;
+                    let errorCount = 0;
+                    const vialsToInsert = [];
+
+                    for (const row of rows) {
+                        const tank = state.tanks.find(t => t.name === row['Tank']);
+                        if (!tank) { errorCount++; continue; }
+
+                        const match = (row['Box'] || '').match(/R(\d+)-(\d+)/);
+                        if (!match) { errorCount++; continue; }
+                        
+                        const rackIndex = parseInt(match[1], 10) - 1;
+                        const levelIndex = parseInt(match[2], 10) - 1;
+                        const box_index = rackIndex * tank.rack_levels + levelIndex;
+                        const box = tank.boxes.find(b => b.box_index === box_index);
+                        const position = parseInt(row['Position'], 10);
+
+                        if (!box || isNaN(position) || position < 1 || position > (box.box_size_x * box.box_size_y)) {
+                            errorCount++; continue;
+                        }
+
+                        // <<< 핵심 수정사항 시작
+                        // CSV의 날짜 값이 비어있으면 빈 문자열("") 대신 null을 사용하도록 변경
+                        vialsToInsert.push({
+                            box_id: box.id,
+                            position: position, 
+                            cell_name: row['세포주'], 
+                            vial_id: row['Vial번호'],
+                            freeze_date: row['동결일'] || null,
+                            stock_date: row['입고일'] || null,
+                            concentration: row['농도'], 
+                            freeze_operator: row['동결작업자'],
+                            freeze_count: row['동결횟수'], 
+                            origin: row['Origin'], 
+                            process_details: row['기타(공정내역)']
+                        });
+                        // <<< 핵심 수정사항 끝
+
+                        importedCount++;
+                    }
+                    
+                    // ▼▼▼▼▼ 10000개씩 처리 ▼▼▼▼▼
+                    const CHUNK_SIZE = 10000;
+                    if (vialsToInsert.length > 0) {
+                        for (let i = 0; i < vialsToInsert.length; i += CHUNK_SIZE) {
+                            const chunk = vialsToInsert.slice(i, i + CHUNK_SIZE);
+                            console.log(`Importing status chunk ${i / CHUNK_SIZE + 1}...`);
+                            const { error } = await _supabase.from('vials').insert(chunk);
+                            if (error) throw error;
+                        }
+                    }
+                    // ▲▲▲▲▲ 10000개씩 처리 ▲▲▲▲▲
+
+                    // 성공 메시지를 띄우기 전에 데이터를 다시 불러와 화면을 새로고침합니다.
+                    await loadAllDataFromSupabase();
+
+                    let message = `${importedCount}개의 Vial 정보를 성공적으로 가져왔습니다.`;
+                    if (errorCount > 0) message += ` ${errorCount}개의 행은 위치 정보가 잘못되어 무시되었습니다.`;
+                    showCustomAlert(message, 'success');
+
+                } catch (err) {
+                    showCustomAlert(`CSV 파일 처리 중 오류 발생: ${err.message}`, 'error');
+                } finally {
+                    e.target.value = '';
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+
+        function getLocationString(tankId, boxId, vialPosition) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            if (!tank) return { tankName: 'N/A', boxName: 'N/A', vialPos: 'N/A' };
+            const box = tank.boxes.find(b => b.id === boxId);
+            if (!box) return { tankName: tank.name, boxName: 'N/A', vialPos: 'N/A' };
+
+            const rackIndex = Math.floor(box.box_index / tank.rack_levels);
+            const levelIndex = box.box_index % tank.rack_levels;
+            return {
+                tankName: tank.name,
+                boxName: `R${rackIndex + 1}-${levelIndex + 1}`,
+                vialPos: vialPosition ? `${vialPosition}` : 'N/A'
+            };
+        }
+
+        function handleSearch(e) {
+            const query = e.target.value.toLowerCase();
+            state.searchQuery = query; // <<< 현재 검색어를 state에 저장
+
+            const resultsContainer = document.getElementById('search-results-container');
+            
+            document.querySelectorAll('#search-results-summary [data-cell-name]').forEach(el => {
+                const cellName = (el.dataset.cellName || '').toLowerCase();
+                el.classList.toggle('bg-yellow-200', query && cellName.includes(query));
+            });
+
+            if (!query) {
+                resultsContainer.innerHTML = '';
+                return;
+            }
+            
+            const results = state.tanks.flatMap((tank) => 
+                tank.boxes.flatMap((box) => 
+                    (box.vials || [])
+                        .filter(vial => 
+                            (vial.cell_name || '').toLowerCase().includes(query) || 
+                            (vial.vial_id || '').toLowerCase().includes(query) || 
+                            (vial.origin || '').toLowerCase().includes(query)
+                        )
+                        .map(vial => ({ tank, box, vial }))
+                )
+            );
+
+            let resultsHTML = '<h4 class="font-semibold mt-4 mb-2">검색 결과</h4>';
+            if (results.length === 0) {
+                resultsHTML += '<p>검색 결과가 없습니다.</p>';
+            } else {
+                resultsHTML += `
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50"><tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">세포주 (ID: Vial 번호)</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">농도</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">위치 (R: Rack 위치, P: Vial 위치)</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">동결일</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Origin</th>
+                        </tr></thead>
+                        <tbody class="bg-white divide-y divide-gray-200">`;
+                results.forEach(({ tank, box, vial }) => {
+                    const { tankName, boxName, vialPos } = getLocationString(tank.id, box.id, vial.position);
+                    const locationStr = `${tankName}, ${boxName}, P${vialPos}`;
+                    resultsHTML += `
+                        <tr class="hover:bg-gray-50 cursor-pointer search-result-item" data-tank-id="${tank.id}" data-box-id="${box.id}" data-vial-pos="${vial.position}">
+                            <td class="px-4 py-2 whitespace-nowrap"><strong>${vial.cell_name}</strong><br><small>ID: ${vial.vial_id}</small></td>
+                            <td class="px-4 py-2 text-sm text-gray-600">${vial.concentration || ''}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">${locationStr}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">${vial.freeze_date || ''}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">${vial.origin || ''}</td>
+                        </tr>
+                    `;
+                });
+                resultsHTML += '</tbody></table>';
+            }
+            resultsContainer.innerHTML = resultsHTML;
+
+            document.querySelectorAll('.search-result-item').forEach(item => {
+                item.onclick = () => {
+                    const { tankId, boxId, vialPos } = item.dataset;
+                    navigateTo('status');
+                    setTimeout(() => { // Allow page to render first
+                        renderTankDetails(tankId);
+                        renderBoxDetails(tankId, boxId);
+                        const vialEl = document.querySelector(`.vial[data-position='${vialPos}']`);
+                        if(vialEl) {
+                        vialEl.click();
+                        vialEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
+                };
+            });
+        }
+
+
+        function renderSearchSummary() {
+            const summaryContainer = document.getElementById('search-results-summary');
+            const cellSummary = state.tanks
+                .flatMap(t => t.boxes)
+                .flatMap(b => b.vials || [])
+                .reduce((acc, vial) => {
+                    if (vial.cell_name) {
+                        acc[vial.cell_name] = (acc[vial.cell_name] || 0) + 1;
+                    }
+                    return acc;
+                }, {});
+
+            const totalTypes = Object.keys(cellSummary).length;
+            const totalCount = Object.values(cellSummary).reduce((a, b) => a + b, 0);
+
+            let summaryHTML = `
+                <h4 class="font-semibold mb-2">보유 세포주 현황</h4>
+                <p class="text-sm text-gray-600 mb-2">총 ${totalTypes} 종류, 총 ${totalCount} 개 보유 중</p>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+            `;
+
+            Object.entries(cellSummary).sort().forEach(([name, count]) => {
+                summaryHTML += `
+                    <div class="p-2 border rounded-md cursor-pointer hover:bg-yellow-100 text-sm" data-cell-name="${name}">
+                        <strong>${name}:</strong> ${count}개
+                    </div>`;
+            });
+
+            summaryHTML += '</div>';
+            summaryContainer.innerHTML = summaryHTML;
+            
+            summaryContainer.querySelectorAll('[data-cell-name]').forEach(el => {
+                el.onclick = () => {
+                    document.getElementById('search-input').value = el.dataset.cellName;
+                    document.getElementById('search-input').dispatchEvent(new Event('input'));
+                };
+            });
+        }
+        
+        function renderUserAdminPage() {
+            const tableBody = document.getElementById('user-list-table-body');
+            tableBody.innerHTML = '';
+            
+                state.allUsers.forEach(user => {
+                    const isCurrentUser = user.id === state.loggedInUser.id;
+                    const row = document.createElement('tr');
+                    // role 별 권한 분리
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${user.email || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.role}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <select class="role-select border rounded p-1" data-id="${user.id}" ${isCurrentUser ? 'disabled' : ''}>
+                            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>admin</option>
+                            <option value="observer" ${user.role === 'observer' ? 'selected' : ''}>observer</option>
+                            <option value="ART_manager" ${user.role === 'ART_manager' ? 'selected' : ''}>ART_manager</option>
+                            <option value="RnD_manager" ${user.role === 'RnD_manager' ? 'selected' : ''}>RnD_manager</option>
+                            <option value="ART_observer" ${user.role === 'ART_observer' ? 'selected' : ''}>ART_observer</option>
+                            <option value="RnD_observer" ${user.role === 'RnD_observer' ? 'selected' : ''}>RnD_observer</option>
+                            <option value="no role" ${user.role === 'No role' ? 'selected' : ''}>No role</option>
+                        </select>
+                        </td>
+                    `;
+                    // ...
+                    tableBody.appendChild(row);
+                });
+
+            tableBody.querySelectorAll('.role-select').forEach(select => {
+                select.addEventListener('change', async (e) => {
+                    const newRole = e.target.value;
+                    const id = e.target.dataset.id;
+                    const userEmail = state.allUsers.find(u=>u.id===id).email;
+                    if (confirm(`사용자 ${userEmail}의 권한을 ${newRole}(으)로 변경하시겠습니까?`)) {
+                        try {
+                            const { error } = await _supabase.from('profiles').update({ role: newRole }).eq('id', id);
+                            if (error) throw error;
+                            showCustomAlert('권한이 변경되었습니다.', 'success');
+                        } catch (error) {
+                            showCustomAlert(`권한 변경에 실패했습니다: ${error.message}`, 'error');
+                            e.target.value = state.allUsers.find(u=>u.id===id).role;
+                        }
+                    } else {
+                        e.target.value = state.allUsers.find(u=>u.id===id).role;
+                    }
+                });
+            });
+        }
+
+        async function showChangeSpecModal(tankId, boxId) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            const box = tank?.boxes.find(b => b.id === boxId);
+            if (!box) return;
+
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">Box 규격 변경</h3>
+                <p class="text-sm mb-4">경고: 규격을 줄이면 초과된 위치의 Vial 정보가 삭제될 수 있습니다.</p>
+                <form id="change-spec-form" class="space-y-3">
+                    <input type="number" name="box_size_x" value="${box.box_size_x}" placeholder="가로 개수 (X)" class="w-full p-2 border rounded" required>
+                    <input type="number" name="box_size_y" value="${box.box_size_y}" placeholder="세로 개수 (Y)" class="w-full p-2 border rounded" required>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-indigo-500 rounded">변경</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+
+            document.getElementById('change-spec-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const newX = parseInt(form.elements.box_size_x.value, 10);
+                const newY = parseInt(form.elements.box_size_y.value, 10);
+                const newTotal = newX * newY;
+
+                const vialsToDelete = box.vials.filter(v => v.position > newTotal);
+                if (vialsToDelete.length > 0) {
+                    if (!confirm(`${vialsToDelete.length}개의 Vial이 규격 밖으로 벗어나게 되어 삭제됩니다. 계속하시겠습니까?`)) {
+                        return;
+                    }
+                }
+
+                try {
+                    if (vialsToDelete.length > 0) {
+                        const idsToDelete = vialsToDelete.map(v => v.id);
+                        const { error: deleteError } = await _supabase.from('vials').delete().in('id', idsToDelete);
+                        if (deleteError) throw new Error(`초과된 Vial 삭제 실패: ${deleteError.message}`);
+                    }
+                    
+                    const { error: updateError } = await _supabase.from('boxes').update({ box_size_x: newX, box_size_y: newY }).eq('id', boxId);
+                    if (updateError) throw new Error(`Box 규격 변경 실패: ${updateError.message}`);
+
+                    closeModal();
+                    await loadAllDataFromSupabase(); // <<< 실시간 업데이트 추가
+                    showCustomAlert('Box 규격이 성공적으로 변경되었습니다.', 'success');
+
+                } catch (error) {
+                    console.error("규격 변경 실패:", error);
+                    showCustomAlert(error.message, "error");
+                }
+            };
+        }
+
+
+        async function showEditTankModal(tankId) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            if (!tank) return;
+
+            const modalHTML = `
+                <h3 class="text-xl font-bold mb-4">보관 장비 정보 수정</h3>
+                <form id="edit-tank-form" class="space-y-3">
+                    <input type="text" name="name" value="${tank.name}" placeholder="장비 번호/이름" class="w-full p-2 border rounded" required>
+                    <input type="text" name="location" value="${tank.location}" placeholder="현재 위치" class="w-full p-2 border rounded" required>
+                    <p class="text-xs text-gray-500">참고: Rack 및 Level 개수는 Tank를 삭제 후 다시 생성해야 변경할 수 있습니다.</p>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" class="cancel-modal-btn px-4 py-2 bg-gray-300 rounded">취소</button>
+                        <button type="submit" class="px-4 py-2 text-white bg-blue-500 rounded">저장</button>
+                    </div>
+                </form>
+            `;
+            showModal(modalHTML);
+
+            document.getElementById('edit-tank-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const updatedData = {
+                    name: form.elements.name.value,
+                    location: form.elements.location.value,
+                };
+
+                try {
+                    const { error } = await _supabase.from('tanks').update(updatedData).eq('id', tankId);
+                    if (error) throw error;
+                    closeModal();
+                    await loadAllDataFromSupabase(); // <<< 실시간 업데이트 추가
+                    showCustomAlert('장비 정보가 성공적으로 수정되었습니다.', 'success');
+                } catch (error) {
+                    console.error("Tank 수정 실패:", error);
+                    showCustomAlert(`수정에 실패했습니다: ${error.message}`, 'error');
+                }
+            };
+        }
+
+
+        async function handleDeleteTank(tankId) {
+            const tank = state.tanks.find(t => t.id === tankId);
+            if (!tank) return;
+
+            if (confirm(`정말로 '${tank.name}' 장비를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며, 내부의 모든 Box와 Vial 정보도 함께 삭제됩니다.`)) {
+                try {
+                    const { error } = await _supabase.from('tanks').delete().eq('id', tankId);
+                    if (error) throw error;
+                    
+                    state.currentSelection = { tankId: null, boxId: null, vialPosition: null };
+                    await loadAllDataFromSupabase(); // <<< 실시간 업데이트 추가
+                    showCustomAlert(`'${tank.name}' 장비가 성공적으로 삭제되었습니다.`, 'success');
+
+                } catch (error) {
+                    console.error("Tank 삭제 실패:", error);
+                    showCustomAlert(`삭제에 실패했습니다: ${error.message}`, 'error');
+                }
+            }
+        }
+
+
+        // AI 채팅 메시지 처리 메인 함수
+        async function handleSendMessage(event) {
+            event.preventDefault();
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('chat-send-btn');
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return;
+
+            appendMessage(userMessage, 'user');
+            chatInput.value = '';
+            sendBtn.disabled = true;
+
+            const loadingEl = appendMessage('AI가 답변을 생성 중입니다...', 'loading');
+
+            try {
+                const botResponse = await queryLLM_GeminiFlash(userMessage);
+                updateMessage(loadingEl, botResponse, 'bot');
+            } catch (error) {
+                console.error('AI 응답 생성 실패:', error);
+                updateMessage(loadingEl, `죄송합니다, 답변 생성 중 오류가 발생했습니다.\n오류: ${error.message}`, 'bot');
+            } finally {
+                sendBtn.disabled = false;
+                chatInput.focus();
+            }
+        }
+
+        // Supabase Edge Function을 호출하는 함수
+        async function queryLLM_GeminiFlash(prompt) {
+            const { data, error } = await _supabase.functions.invoke('gemini-proxy', {
+                body: JSON.stringify({ prompt: prompt }),
+            });
+            if (error) {
+                throw new Error(`Edge Function 호출 실패: ${error.message}`);
+            }
+            return data.response;
+        }
+
+        // 채팅 UI에 메시지를 추가/수정하는 헬퍼 함수들
+        function appendMessage(content, type) {
+            const chatHistory = document.getElementById('chat-history');
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `chat-message ${type} mb-4 flex flex-col`;
+            const senderName = type === 'user' ? '나' : 'AI 어시스턴트';
+            messageWrapper.innerHTML = `
+                <p class="font-bold text-sm ${type === 'user' ? 'text-gray-600' : 'text-blue-600'}">${senderName}</p>
+                <div class="message-content"><p>${content.replace(/\n/g, '<br>')}</p></div>
+            `;
+            chatHistory.appendChild(messageWrapper);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return messageWrapper;
+        }
+
+        function updateMessage(element, newContent, newType) {
+            element.className = `chat-message ${newType} mb-4 flex flex-col`;
+            const contentP = element.querySelector('.message-content p');
+            if (contentP) {
+                let htmlContent = newContent
+                    .replace(/\n/g, '<br>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\* (.*?)(<br>|$)/g, '<li>$1</li>');
+                htmlContent = htmlContent.replace(/(<li>.*<\/li>)/g, '<ul class="list-disc list-inside pl-4 mt-2">$1</ul>');
+                contentP.innerHTML = htmlContent;
+            }
+        }
+
+
+
+    });
+</script>
+<div id="toast-notification" class="fixed bottom-5 right-5 bg-gray-800 text-white py-2 px-4 rounded-lg shadow-lg transition-opacity duration-300 opacity-0 z-[200]">
+    <p id="toast-message"></p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </body>
 </html>
