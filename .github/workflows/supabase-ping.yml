@@ -1,4 +1,4 @@
-name: Supabase Project Ping
+name: Supabase Projects Ping
 
 on:
   schedule:
@@ -8,11 +8,18 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    strategy:
+      # 여기에 여러 프로젝트 정보를 추가합니다.
+      matrix:
+        project:
+          - { id: 'gyehophknpfwheywfcpk', key_secret: 'SUPABASE_ANON_KEY_PROJECT_A' }
+          - { id: 'yvezooyqyehsbstpwdia', key_secret: 'SUPABASE_ANON_KEY_PROJECT_B' }
+          # - { id: '[세 번째 프로젝트 ID]', key_secret: 'SUPABASE_ANON_KEY_PROJECT_C' } # 필요시 계속 추가
+
     steps:
-      - name: Ping Supabase RPC
-        # 테이블 대신 RPC 함수를 호출하여 프로젝트 활성 상태를 유지합니다.
+      - name: Ping Supabase RPC for ${{ matrix.project.id }}
         run: |
           curl -i -X POST \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            "https://gyehophknpfwheywfcpk.supabase.co/rest/v1/rpc/hello_world"
+            -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
+            -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
+            "https://${{ matrix.project.id }}.supabase.co/rest/v1/rpc/hello_world"
