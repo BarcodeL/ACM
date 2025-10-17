@@ -28,7 +28,7 @@ jobs:
           curl -fsS -G \
             -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
             -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
-            --data-urlencode "select=count" \
+            --data-urlencode "select=count:count(created_at),last:max(created_at)" \
             "https://${{ matrix.project.id }}.supabase.co/rest/v1/_keepalive"
 
       - name: (Optional) Touch Storage API
