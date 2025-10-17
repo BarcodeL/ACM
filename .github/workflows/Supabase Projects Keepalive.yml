@@ -25,11 +25,15 @@ jobs:
 
       - name: Read _keepalive count (read)
         run: |
-          curl -fsS -G \
+          curl -i -fsS -G \
             -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
             -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
-            --data-urlencode "select=count:count(created_at),last:max(created_at)" \
+            -H "Prefer: count=exact" \
+            --data-urlencode "select=created_at" \
+            --data-urlencode "order=created_at.desc" \
+            --data-urlencode "limit=1" \
             "https://${{ matrix.project.id }}.supabase.co/rest/v1/_keepalive"
+
 
       - name: (Optional) Touch Storage API
         run: |
