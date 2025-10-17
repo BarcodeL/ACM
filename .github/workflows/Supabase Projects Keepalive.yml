@@ -1,0 +1,39 @@
+name: Supabase Projects Keepalive
+
+on:
+  schedule:
+    # 6시간마다 실행 (UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project:
+          - { id: 'gyehophknpfwheywfcpk', key_secret: 'SUPABASE_ANON_KEY_PROJECT_A' }
+          - { id: 'yvezooyqyehsbstpwdia', key_secret: 'SUPABASE_ANON_KEY_PROJECT_B' }
+
+    steps:
+      - name: Heartbeat RPC (write+read)
+        run: |
+          curl -fsS -X POST \
+            -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
+            -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
+            "https://${{ matrix.project.id }}.supabase.co/rest/v1/rpc/heartbeat"
+
+      - name: Read _keepalive count (read)
+        run: |
+          curl -fsS -G \
+            -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
+            -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
+            --data-urlencode "select=count" \
+            "https://${{ matrix.project.id }}.supabase.co/rest/v1/_keepalive"
+
+      - name: (Optional) Touch Storage API
+        run: |
+          curl -fsS \
+            -H "apikey: ${{ secrets[matrix.project.key_secret] }}" \
+            -H "Authorization: Bearer ${{ secrets[matrix.project.key_secret] }}" \
+            "https://${{ matrix.project.id }}.supabase.co/storage/v1/bucket"
